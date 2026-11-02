@@ -1,0 +1,71 @@
+# ---- Secrets & environment ----
+# .env.example is the committed template; real values never are.
+.env
+.env.*
+!.env.example
+
+# ---- OS ----
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# ---- IDE / editors ----
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*~
+
+# ---- Node / TypeScript (backend) ----
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.eslintcache
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Gradle / Kotlin / Android (client) ----
+.gradle/
+build/
+local.properties
+.kotlin/
+kotlin-js-store/
+.cxx/
+captures/
+*.apk
+*.aab
+*.aar
+*.dex
+*.hprof
+# The Gradle wrapper jar must stay tracked so a clean checkout can build.
+!gradle/wrapper/gradle-wrapper.jar
+
+# ---- Signing ----
+*.keystore
+*.jks
+keystore.properties
+
+# ---- iOS (target is scaffolded, not built) ----
+xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+iosApp/Pods/
+Podfile.lock
+
+# ---- Logs & temp ----
+*.log
+logs/
+tmp/
+
+# Reference material — never committed
+*.pdf
