@@ -8,8 +8,8 @@ reviewed. Maintained incrementally alongside [DECISIONS.md](DECISIONS.md) — se
 
 - Claude Code (Sonnet 5) — wrote the initial agent instruction files and planning docs
   (AGENTS.md, DECISIONS.md, README.md, this file).
-- Claude Code (Opus 5) — user-journey definition onward; planning, scaffolding, and
-  implementation.
+- Claude Code (Opus 5) — user-journey definition onward: planning, the screen kit, the
+  API contract, and the backend implementation and its test suite.
 
 Used conversationally throughout, with every change reviewed before being kept.
 
@@ -39,7 +39,7 @@ contradicted.
 
 ## Key prompts / moments that shaped the solution
 
-The six that changed the shape of the solution, rather than its details.
+The seven that changed the shape of the solution, rather than its details.
 
 1. **Backend as the boundary.** Putting `ProductRepository` and `EmailService` behind
    interfaces, in response to the requirement for a foundation that can grow rather than
@@ -83,6 +83,15 @@ The six that changed the shape of the solution, rather than its details.
    carry; and list endpoints stopped returning a `description` no card renders. Each of
    those is cheaper as a drawing than as a migration.
 
+7. **Building the backend against a frozen contract.** The spec was written and agreed
+   before any code existed, so implementation was a matter of honouring it rather than
+   discovering it. That ordering paid off in a specific way: the contract tests were
+   written from SPEC §5 and §11 rather than from the code, so they tested what was
+   promised instead of what was built — and one of them failed, correctly, against a
+   real defect. The three open choices the spec deliberately left (framework, runtime,
+   test runner) were decided explicitly and recorded in DECISIONS.md instead of being
+   settled by whichever import got typed first.
+
 _Also shaped by:_ making AI-usage logging an unprompted agreement in AGENTS.md so this
 log is a by-product of the work rather than a reconstruction; adding a "Start here"
 onboarding order and a file-ownership rule across the five docs; scoping the design
@@ -92,7 +101,9 @@ PR template.
 
 ## Where AI got something wrong and how it was caught
 
-_Appended as the build progresses._
+Appended as the work progresses. Substantive technical errors only — a trust boundary
+specified backwards, a security claim that does not hold, a quantity asserted without
+measuring it.
 
 - **Two "specified" behaviours had undefined edges.** The configurable featured list
   promised five products while skipping ids that no longer resolve, and the enquiry
@@ -153,3 +164,36 @@ _Appended as the build progresses._
   real constraints are that the images are PNGs at eight times a comparable JPEG and
   that their aspect ratios span 0.58 to 1.92, which is what rules out cropping them to
   square. Caught by measuring all twenty rather than reasoning about them.
+
+- **A middleware ordering bug that made 405 unreachable.** The `Content-Type` guard was
+  mounted app-wide, ahead of routing. A `POST` to a `GET`-only path was therefore judged
+  on its content type and answered `400 MALFORMED_REQUEST`, when the honest answer is
+  that the verb is wrong whatever the body claims to be — so three of the registry's
+  error codes were reachable only by accident of request shape. Caught by a contract test
+  written from SPEC §5.1 rather than from the code: it asserted `POST /home` is a 405 and
+  got a 400. Body parsing is now scoped to the single endpoint that has a body.
+
+- **A cold-start double fetch, found by reading the spec against the design.** SPEC §4
+  fires `/home` and `/categories` in parallel. Nothing in the first cache design stopped
+  both from missing a cold cache and both from fetching the whole catalogue — on the
+  first request of every session, which is exactly when a reviewer is watching. Found
+  while writing the cache, not while debugging it, and fixed with single-flight: the
+  cache holds the in-progress refresh and later callers await it.
+
+- **An HTTP status that contradicted the guarantee underneath it.** `POST /enquiries`
+  was first written to answer `202 Accepted`. 202 means the work is queued for later,
+  which is the precise opposite of this endpoint's one promise — that the mail server has
+  already accepted the message before the response is written. The body asserted one
+  thing and the status code another. Changed to 200 before it reached the suite.
+
+- **A shutdown handler that could report success over an abandoned shutdown.** The
+  graceful-shutdown path has two exits — a clean close, and a forced one when the grace
+  period expires with requests still in flight — and both could fire for the same
+  signal, because a request that finishes just after the deadline triggers the close
+  callback after the forced exit has already run. The late clean close reported exit 0
+  over a shutdown that had given up on work. In production `process.exit` happens to
+  make the second call unreachable, which is exactly why it would never have been
+  noticed: the invariant held by accident of the runtime rather than by the code. Caught
+  by a unit test that injected the exit function instead of letting it kill the process,
+  and fixed with a latch so the first outcome wins.
+

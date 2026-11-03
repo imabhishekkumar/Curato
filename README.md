@@ -2,9 +2,11 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: specification and planning complete; implementation not started.**
-> Everything below describes the intended system. Commands, behaviours and setup steps
-> are the target shape and are marked as verified only once they have actually been run.
+> **Status: backend implemented and tested; Android client not started.**
+> The backend runs and its suite passes on Node 22 — see [Testing](#testing). Two things
+> are **not** yet verified: `docker compose up` (written, but Docker was unavailable on
+> the machine it was authored on) and anything client-side. Everything describing the
+> client below is the intended shape, not a built one.
 
 ## Stack, and why
 
@@ -74,8 +76,6 @@ error messages, and layouts respect large system font scales.
 **Prerequisites:** Docker Desktop, and Android Studio with an emulator image. Nothing
 else — no accounts, no paid services, no API keys.
 
-_Commands are the target shape; filled in and verified once the project is scaffolded._
-
 ### 1. Backend (~2 minutes)
 
 ```bash
@@ -89,7 +89,22 @@ This starts the API and Mailhog. Verify before moving on:
 curl localhost:8080/health
 ```
 
+A healthy stack answers `{"status":"ok","upstream":"reachable","smtp":"reachable"}` inside
+the envelope. It returns `200` even when a dependency is degraded — the body is what tells
+you which, so read it rather than the status code.
+
 Mailhog's web inbox — where enquiry emails land — is at <http://localhost:8025>.
+
+**Not verified:** the compose path above is written but has not been run, because Docker
+was not installed on the machine the backend was authored on. To run the API directly
+instead, which *is* verified:
+
+```bash
+cd backend && nvm use && npm ci && npm run dev
+```
+
+That needs an SMTP listener on `SMTP_PORT` before enquiries will send; reads work without
+one, and `/health` will report `smtp: unreachable` until it exists.
 
 ### 2. Android client (~5 minutes)
 
@@ -118,18 +133,18 @@ Every variable lives in `.env.example` with a safe placeholder. No secrets are c
 | `CORS_ORIGINS` | Comma-separated allowlist — never `*` |
 | `UPSTREAM_BASE_URL` | Fake Store base URL |
 | `UPSTREAM_TIMEOUT_MS` | Upstream request timeout |
+| `UPSTREAM_RETRIES` | Additional attempts after the first, so a hung upstream degrades us rather than exhausting our connections |
 | `CACHE_TTL_SECONDS` | Product-list cache lifetime (default 300) |
 | `CACHE_MAX_STALE_SECONDS` | How long cached data may still be served when the upstream is unreachable |
 | `MAX_REQUEST_BODY_BYTES` | Body size cap; larger requests are rejected before parsing |
 | `FEATURED_PRODUCT_IDS` | Comma-separated ids for the home page. **Unset = computed top 5 by rating.** Setting it also changes the shelf heading from "Top rated" to "Featured", since a curated list is not a ranking |
-| `SMTP_HOST` / `SMTP_PORT` | Mailhog locally; a real provider later |
-| `SALES_INBOX_ADDRESS` | Where enquiries are delivered |
+| `SMTP_HOST` / `SMTP_PORT` | Mailhog locally; a real provider later. Compose overrides the host to the `mailhog` service |
+| `SALES_INBOX_ADDRESS` | Where enquiries are delivered. **Required** — the service refuses to start without it |
+| `MAIL_FROM_ADDRESS` | The envelope sender. **Required** |
+| `LOG_LEVEL` | `debug` / `info` / `warn` / `error` / `silent` (default `info`) |
 | `ENQUIRY_RATE_LIMIT` / `ENQUIRY_RATE_WINDOW_S` | Abuse control on the enquiry endpoint |
 
 ## Architecture
-
-_To be completed as the project is scaffolded — see [AGENTS.md](AGENTS.md) in the
-meantime for the intended shape._
 
 ### API
 
@@ -169,6 +184,34 @@ Full endpoint contracts, the error-code registry and validation rules are in
 user-facing string, why ranking happens on the backend, and why Home is two parallel
 calls rather than one aggregate.
 
+### Backend (`backend/`)
+
+Ports and adapters at the two boundaries the brief says will change, with the rules in
+the middle kept pure so they are cheap to test and cheap to change.
+
+```
+src/
+  domain/        the rules, no I/O: ranking, the featured-list normalization,
+                 search filtering, the slug map, the error registry
+  domain/ports/  ProductRepository and EmailService — the two seams
+  adapters/      Fake Store (HTTP client, mapper, TTL cache) and SMTP
+  services/      orchestration: catalogue reads, the enquiry path
+  http/          envelope, validation, the route table, the catch-all, routes
+```
+
+Nothing in `domain/` imports anything from `adapters/` or `http/`, which is why the
+rules most likely to change are also the ones fastest to test. `createApp()` takes its
+dependencies as arguments rather than resolving them from a container — at this size a DI
+framework would be ceremony, and it means every HTTP test runs against the real app over
+fake adapters.
+
+Run it with Node 22 (`.nvmrc` pins it). The container uses the same version, so the
+runtime a reviewer gets from `docker compose up` matches the one the suite ran on.
+
+### Client
+
+_Not started — see [AGENTS.md](AGENTS.md) for the intended shape._
+
 ## Where to change things
 
 A map of the handful of changes most likely to be asked for, so a small change does not
@@ -177,18 +220,29 @@ require reading the whole repo first.
 | To change… | Edit |
 |---|---|
 | Which products are featured | `FEATURED_PRODUCT_IDS` in `.env` — no code, no rebuild |
-| How "top rated" is ranked | The ranking function in the backend's product service (one place; the client never ranks) |
-| The product data source | Add a `ProductRepository` implementation; swap the binding. Routes and client untouched |
-| The email provider | Add an `EmailService` implementation; swap the binding |
+| How "top rated" is ranked | [`backend/src/domain/ranking.ts`](backend/src/domain/ranking.ts) — one pure function; the client never ranks |
+| The product data source | Add a [`ProductRepository`](backend/src/domain/ports/product-repository.ts) implementation and pass it to `createApp`. Routes, services and client untouched |
+| The email provider | Add an [`EmailService`](backend/src/domain/ports/email-service.ts) implementation and pass it to `createApp` |
+| Which products are curated vs computed | [`backend/src/domain/featured.ts`](backend/src/domain/featured.ts) holds the normalization; the env var drives it |
+| An error's HTTP status or copy | The registry in [`backend/src/domain/errors.ts`](backend/src/domain/errors.ts) — one table, no per-route handling |
 | A field on the product | Backend DTO + mapper, then the client DTO + domain model — the API contract in [SPEC.md](SPEC.md) §3 is the checklist. Decide first whether the field belongs on `ProductSummary` (every list) or only on `Product` (the product screen) |
 | Colours, type, spacing | Theme tokens in `ui/designsystem` — not individual screens. The token values are in the [Screen Kit](https://claude.ai/artifact/7bKjCMsswvdLHqWAo9DiqB) |
 | A reusable component | `ui/designsystem`; screens compose it rather than styling inline |
-| Copy shown on an error | `userMessage` on the backend, so it changes without a client release |
+| Copy shown on an error | `userMessage` in the backend's error registry, so it changes without a client release |
 | Adding a screen | A new route taking primitives only, a ViewModel exposing `StateFlow<UiState>`, and a Compose screen |
 
 ## Testing
 
-_Commands and results filled in as the suite is built._
+```bash
+cd backend && nvm use && npm ci
+npm run typecheck
+npm test
+```
+
+The whole suite runs in under a second with no network, no SMTP and no emulator, which is
+the point — it is fast enough to run between edits, as [SPEC.md](SPEC.md) §11.3 requires.
+The upstream catalogue is a recorded fixture, so a silent change to Fake Store fails a
+test rather than a screen.
 
 Tests cover the critical path and exist to make the code safe to change. The strategy,
 and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
@@ -198,9 +252,16 @@ and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
 - **Backend integration** — `POST /enquiries` against a stubbed SMTP: 2xx only after
   acceptance, `EMAIL_SEND_FAILED` on rejection, backend-resolved price in the email,
   validation error shape, rate limiting.
-- **Client unit** — use cases, ViewModel state transitions, envelope-to-result mapping,
-  recently-viewed LRU and de-dupe, draft restore honouring submitted state. All in
-  `commonMain`, so no device is needed.
+- **Backend adapter** — the upstream's refusal to use status codes: a `200` with an empty
+  body becomes a domain not-found, `200 []` becomes an empty list, and neither becomes a
+  thrown parse that would surface as a 500.
+- **Backend contract** — every endpoint returns a well-formed envelope, `data` and `error`
+  stay mutually exclusive, `developerMessage` carries no stack frame, and list endpoints
+  never carry `description`. Plus the four paths no route handler owns: an oversized body,
+  a malformed body, an unknown route and a wrong verb.
+- **Client unit** — _not started._ Use cases, ViewModel state transitions,
+  envelope-to-result mapping, recently-viewed LRU and de-dupe, draft restore honouring
+  submitted state. All in `commonMain`, so no device is needed.
 - **Not covered: Compose UI instrumentation tests.** A deliberate cut — emulator-bound,
   slow, and the budget buys more confidence as unit coverage of the rules. Layout
   regressions are caught by eye, not CI.

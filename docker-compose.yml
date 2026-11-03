@@ -1,0 +1,42 @@
+# Brings the API and a local SMTP catcher up from a clean checkout.
+#
+#   cp .env.example .env
+#   docker compose up
+#
+# Mailhog's web inbox — where enquiry emails land — is at http://localhost:8025.
+
+services:
+  api:
+    build:
+      context: ./backend
+    ports:
+      - '${PORT:-8080}:${PORT:-8080}'
+    env_file:
+      - .env
+    environment:
+      # Inside the compose network the mail catcher is a service name, not localhost.
+      SMTP_HOST: mailhog
+      SMTP_PORT: '1025'
+    depends_on:
+      mailhog:
+        condition: service_started
+    healthcheck:
+      # Uses node rather than curl, which the alpine runtime image does not carry.
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:' + (process.env.PORT || 8080) + '/health').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+
+  mailhog:
+    image: mailhog/mailhog:v1.0.1
+    ports:
+      # 1025 SMTP, 8025 web inbox.
+      - '1025:1025'
+      - '8025:8025'
+    restart: unless-stopped

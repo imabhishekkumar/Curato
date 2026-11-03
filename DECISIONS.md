@@ -50,6 +50,68 @@ is expected to evolve.
   keeps the same client working across Android and the (planned) iOS target.
 - **Navigation:** Navigation Compose Multiplatform.
 
+## Backend implementation choices
+
+Settled when the backend was built. The spec fixes the contract; these are the choices
+about how to honour it that the spec deliberately left open.
+
+- **Express 5, not Fastify.** Express 5 propagates a rejected promise from an async
+  handler to the error handler on its own, which removes the wrapper utility Express 4
+  needed and is the single feature that matters most here — every route is async. Fastify
+  is faster and ships schema validation, but its built-in error behaviour fights the
+  error registry rather than filling gaps in it: a bad `Content-Type` is a 415 where
+  SPEC §5.1 wants a 400 `MALFORMED_REQUEST`, so we would be overriding its decisions
+  instead of making our own. Throughput is not the constraint on a service whose data
+  fits in 11 KB.
+- **Node 22 LTS, pinned in `.nvmrc` and `engines`.** The runtime is pinned rather than
+  left to whatever is installed, because the Docker image and a local `npm run dev` have
+  to agree. Node 18 was the version on hand and is end-of-life; it is also below the
+  floor for the current test runner and mail client, so building against it would have
+  meant pinning two dependencies back to ship an unsupported runtime.
+- **Zod for request *and* environment validation.** One detail earns it: `issue.path`
+  joined with dots *is* the `fieldErrors` key the envelope specifies, so there is no
+  translation layer between a validation failure and the error the client renders under
+  an input. Reusing it for env parsing means a missing `SALES_INBOX_ADDRESS` fails at
+  boot with every other problem listed alongside it, rather than at the first enquiry.
+- **Vitest and Supertest.** Vitest runs TypeScript with no separate build step, so the
+  suite runs between edits as SPEC §11.3 requires. Supertest drives the app object
+  without binding a port, which is what makes the contract tests cheap enough to cover
+  every endpoint.
+- **A route table, because 405 has no framework support.** Express answers a known path
+  under an unsupported verb with 404, not the 405 the registry defines. Rather than
+  maintain a second list of paths for the fallback to consult, the routes are registered
+  *from* one table and the fallback reads the same table, so the two cannot drift. The
+  alternative — hand-written `.all()` handlers per path — is the same information written
+  twice.
+- **Body parsing is scoped to the one endpoint that has a body**, not mounted
+  app-wide. Mounted globally it runs before routing, so a POST to a GET-only path gets
+  judged on its `Content-Type` and answered 400 when the honest answer is that the verb
+  is wrong, whatever the body claims to be. This was caught by the contract test for
+  405, not by reading the code.
+- **The catalogue cache de-duplicates concurrent refreshes.** Home fires `/home` and
+  `/categories` in parallel by design, so without single-flight both miss a cold cache
+  and both fetch upstream — on the first request of every session. The cache holds the
+  in-progress refresh and the second caller awaits it.
+- **`POST /enquiries` answers 200, not 202.** 202 Accepted promises processing that has
+  not happened yet, which is the opposite of this endpoint's guarantee: the mail server
+  has already accepted the message by the time the response is written. Using 202 would
+  contradict in a status code the thing the response body exists to assert.
+- **Shutdown is graceful, and reports one outcome.** Compose sets
+  `restart: unless-stopped`, so the process is sent SIGTERM on every `docker compose
+  down` and every restart. Tearing down mid-request would, in the worst case, show a
+  customer a failure for an enquiry SMTP had already accepted — so in-flight requests get
+  a bounded grace period, idle keep-alive sockets are released so they do not hold the
+  server open for the whole of it, and the exit code distinguishes a clean stop from an
+  abandoned one. The grace period exists because the alternative to a bound is hanging
+  forever on one stuck request.
+- **The rate limiter keys on the socket IP, with `trust proxy` left unset.** Correct for
+  local docker-compose, where nothing sits in front of the service. Behind a reverse
+  proxy or load balancer it would be wrong in a way that fails quietly — every client
+  collapses into one bucket keyed by the proxy, so the first few enquiries from anyone
+  exhaust the window for everyone. Named here rather than pre-configured, because
+  guessing a proxy depth that does not exist yet is how `trust proxy` becomes a
+  header-spoofing hole.
+
 ## Design system
 
 Planned: a lightweight design system using Compose Material 3, with centralized theme
