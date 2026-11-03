@@ -62,6 +62,32 @@ through.
 | `imageUrl` | string | Absolute URL. |
 | `rating` | `{ rate: number, count: int }` | `rate` 0–5. |
 
+### ProductSummary
+
+Everything a card renders. Returned by every endpoint that produces a **list**; the full
+`Product` is returned only by `GET /products/{id}`.
+
+| Field | Type | Notes |
+|---|---|---|
+| `id` | int | |
+| `title` | string | |
+| `price` | number | |
+| `currency` | string | |
+| `category` | `CategoryRef` | |
+| `imageUrl` | string | |
+| `rating` | `{ rate: number, count: int }` | |
+
+`ProductSummary` is `Product` without `description`. No list screen renders a
+description — it appears on the product screen alone — and against the live catalogue
+`description` is **60% of a list payload** (299 characters on average, 10.6 KB of JSON
+for 20 products). The split is for honesty before weight: an endpoint whose callers
+render cards should not return a field no card can show.
+
+**Not a query flag.** `?lightweight=true` or equivalent would make the response shape
+conditional, so `description` becomes optional on a type the product screen requires it
+on, the DTO stops describing what a caller will receive, and every endpoint needs
+contract tests twice. Each endpoint returns one shape, always.
+
 ### CategoryRef
 
 | Field | Type | Notes |
@@ -117,6 +143,20 @@ ignored, not rejected — it is a diagnostic, not an input.
 
 Base URL is configured per environment. All endpoints return the envelope in §5.
 
+| Endpoint | Returns | Read by |
+|---|---|---|
+| `GET /home` | `ProductSummary` list | Home — the global shelf |
+| `GET /categories` | `ProductSummary` lists | Home — one shelf per category |
+| `GET /categories/{slug}/products` | `ProductSummary` lists | Category screen |
+| `GET /products/search` | `ProductSummary` list | Search |
+| `GET /products/{id}` | **Full `Product`** | Product screen, Enquiry screen |
+| `POST /enquiries` | — | Enquiry screen |
+| `GET /health` | — | docker-compose, reviewer |
+
+**Home opens two calls in parallel** — `/home` and `/categories` — neither waiting on the
+other, each owning its own sections. One may fail while the rest of the screen works
+(§7.2).
+
 **Upstream caching.** The product list is fetched from Fake Store and held in an
 in-memory cache with a short TTL (`CACHE_TTL_SECONDS`, default 300). **Every endpoint
 reads through it, `POST /enquiries` included.** Two reasons: ranking requires the whole
@@ -138,23 +178,55 @@ exists to stop a **client** supplying false data, not to guarantee real-time pri
 and the upstream catalogue is static. A deployment where prices actually move would
 shorten the TTL or revalidate on the enquiry path.
 
+**Upstream adapter contract.** Fake Store does not use HTTP status to signal absence, so
+the adapter translates rather than trusts. Verified against the live API:
+
+| Upstream request | Upstream answers | Adapter maps to |
+|---|---|---|
+| `/products/999` (unknown id) | `200`, `content-length: 0` | Domain not-found → `NOT_FOUND` |
+| `/products/abc` (non-numeric) | `200`, `content-length: 0` | Domain not-found → `NOT_FOUND` |
+| `/products/category/nonsense` | `200 []` | Empty category, not an error |
+| `/products` | `200`, ordered by `id` | Ranked here; see §4.1 |
+
+A body is checked for emptiness **before** it is parsed. Parsing an empty body throws,
+and a thrown parse surfaces as `INTERNAL_ERROR` (500) for a product that merely does not
+exist — the wrong code, the wrong screen, and a Retry offered where retrying cannot help.
+In practice every read resolves from the cached full catalogue, so this binds whoever
+later adds a direct upstream fetch, which is why it belongs to the adapter and not to a
+route.
+
+**Upstream offers no rating sort** — its `?sort=` orders by `id` only. Every ordering in
+this system is therefore computed here, which is what makes the ranking rule below a
+requirement rather than a preference.
+
 ### 4.1 `GET /home`
 
-Home's entire networked payload in one call.
+The global shelf, and nothing else.
 
 ```json
-{ "topRated": [ Product ], "categories": [ CategoryRef ] }
+{ "featured": { "source": "computed", "products": [ ProductSummary ] } }
 ```
+
+`categories` is **not** in this payload — the category list and the products beneath it
+come from §4.2 together, so the list of categories exists in exactly one response and
+cannot disagree with itself.
 
 - **Selection is configurable.** The stated criterion describes the 5 featured products
   as ones that have been *chosen* — curation, not computation. Honouring both readings
   costs one env var, and demonstrates the premise that the product data source is
   expected to change.
 
-  | `FEATURED_PRODUCT_IDS` | `topRated` contains |
-  |---|---|
-  | Unset (default) | The computed top 5 by rating — or all products when the catalogue holds fewer than 5. |
-  | Set (e.g. `1,4,9,12,18`) | **Up to 5**, as configured: the ids that resolve, in the order given. |
+  | `FEATURED_PRODUCT_IDS` | `source` | `products` contains |
+  |---|---|---|
+  | Unset (default) | `"computed"` | The computed top 5 by rating — or all products when the catalogue holds fewer than 5. |
+  | Set (e.g. `1,4,9,12,18`) | `"curated"` | **Up to 5**, as configured: the ids that resolve, in the order given. |
+
+- **`source` exists so the client cannot state something false.** A curated list is not
+  ranked by rating, so a shelf headed "Top rated" containing it would be a lie on the
+  first screen anyone sees: `FEATURED_PRODUCT_IDS=8,4` resolves to the two
+  **lowest-rated** products in the catalogue. The client renders the heading **"Top
+  rated"** for `computed` and **"Featured"** for `curated`, branching on `source` alone.
+  The backend never sends display copy.
 
   **The curated list is authoritative — it is never backfilled.** If the configured list
   yields three products, Home shows three. Topping it up with highest-rated products the
@@ -167,25 +239,63 @@ Home's entire networked payload in one call.
   2. De-duplicate — first occurrence wins, later repeats dropped.
   3. Take the first 5; log that the list was truncated if longer.
   4. Resolve each id; skip those that do not resolve, with a warning log naming the id.
-  5. **If nothing resolves, fall back to the computed top 5.** Home is never empty, and
-     a fully stale config degrades to a sensible default rather than a blank screen.
+  5. **If nothing resolves, fall back to the computed top 5** and report
+     `source: "computed"` — the response describes what was actually produced, never what
+     was configured. Home is never empty, and a fully stale config degrades to a sensible
+     default rather than a blank screen.
   6. Otherwise return what resolved, in configured order, however few that is.
 
   A malformed or stale config is a logged warning, never a 5xx — the home page is the
   first thing anyone sees, and it must not be takeable down by a typo in an env var.
 - **Ranking (deterministic):** `rating.rate` desc → `rating.count` desc → `id` asc. The
-  tie-breaks exist so the response is reproducible and therefore testable.
+  tie-breaks exist so the response is reproducible and therefore testable. They are not
+  ceremonial: in the live catalogue, electronics holds two products at `2.9` separated
+  only by `count` (470 against 250), and that pair straddles the cut at five.
 - Errors: `UPSTREAM_UNAVAILABLE`, `INTERNAL_ERROR`.
 
-### 4.2 `GET /categories/{slug}/products`
+### 4.2 `GET /categories`
+
+Every category with the head of its ranking, in one response. Home renders one shelf per
+entry (§7.2).
+
+```json
+{
+  "categories": [
+    { "category": { "slug": "electronics", "name": "Electronics" },
+      "topRated": [ ProductSummary ] }
+  ]
+}
+```
+
+- One entry per category in the slug map (§3), in that order. **The backend owns the
+  order**, as it owns the ranking and the slug map; the client renders the sequence it is
+  given.
+- `topRated` — **up to 5** per category, the ranking rule of §4.1 scoped to that
+  category. Fewer when the category holds fewer; never padded.
+- **Never curated.** `FEATURED_PRODUCT_IDS` governs §4.1 only. There is no per-category
+  curation hook — a deliberate omission, since the global hook already demonstrates
+  curation overriding computation, and four more env vars is disproportionate here.
+- `description` is omitted (`ProductSummary`), which matters most on this endpoint: it
+  carries more products than any other.
+- **Shelves are a selection, not the category.** Against the live catalogue, electronics
+  and women's clothing hold 6 products each, so one product in each never reaches Home
+  and is found through search or the category screen. Raising the shelf to 6 would render
+  this catalogue in full and make "View all" pointless.
+- Errors: `UPSTREAM_UNAVAILABLE`, `INTERNAL_ERROR`.
+
+### 4.3 `GET /categories/{slug}/products`
 
 ```json
 {
   "category":   { "slug": "mens-clothing", "name": "Men's Clothing" },
-  "topRated":   [ Product ],
-  "additional": [ Product ]
+  "topRated":   [ ProductSummary ],
+  "additional": [ ProductSummary ]
 }
 ```
+
+The category screen's endpoint, reached from a shelf's **View all** or from a deeplink.
+It differs from §4.2 in holding the category's *complete* contents: §4.2 returns the head
+of every category, this returns all of one.
 
 - `topRated` — up to 5, same ranking rule scoped to the category.
 - `additional` — the remainder, `id` asc. **An empty array when the category holds 5 or
@@ -193,13 +303,17 @@ Home's entire networked payload in one call.
 - Unknown slug → `NOT_FOUND`.
 - Errors: `NOT_FOUND`, `UPSTREAM_UNAVAILABLE`, `INTERNAL_ERROR`.
 
-### 4.3 `GET /products/search?q={query}`
+### 4.4 `GET /products/search?q={query}`
 
 ```json
-{ "query": "bag", "results": [ Product ] }
+{ "query": "bag", "results": [ ProductSummary ] }
 ```
 
-- Case-insensitive substring match against `title` **and** `description`.
+- Case-insensitive substring match against `title` **and** `description`. **The match
+  reads a field the response does not return** — matching happens server-side against the
+  cached full catalogue, while results carry `ProductSummary`. A product can therefore be
+  returned for a term that appears nowhere in its visible card, which is correct and is
+  why the result count names the term searched (§7.4).
 - `q` is trimmed; **minimum 2 characters** after trimming, else `VALIDATION_FAILED` with
   `fieldErrors.q`. The client disables submission below 2 characters, so this is a
   defence, not a normal path.
@@ -208,14 +322,17 @@ Home's entire networked payload in one call.
 - Results ordered by the standard ranking rule, so the best-rated match leads.
 - Errors: `VALIDATION_FAILED`, `UPSTREAM_UNAVAILABLE`, `INTERNAL_ERROR`.
 
-### 4.4 `GET /products/{id}`
+### 4.5 `GET /products/{id}`
 
-Returns one `Product`. Unknown id → `NOT_FOUND`.
+Returns one **full `Product`** — the only endpoint that does, and the only source of
+`description`. Unknown id → `NOT_FOUND`.
 
 This endpoint is load-bearing for deeplink-readiness: the product screen resolves its own
-data from an id alone and never depends on data passed by the list that opened it.
+data from an id alone and never depends on data passed by the list that opened it. **The
+enquiry screen calls it too** (§7.6): routes carry primitives only, so
+`product/{id}/enquire` arrives holding an id and must resolve the product it is about.
 
-### 4.5 `POST /enquiries`
+### 4.6 `POST /enquiries`
 
 Request body per §3. Response:
 
@@ -241,7 +358,7 @@ Request body per §3. Response:
 - Errors: `VALIDATION_FAILED`, `NOT_FOUND` (unknown `productId`), `UPSTREAM_UNAVAILABLE`
   (product resolution failed), `EMAIL_SEND_FAILED`, `RATE_LIMITED`, `INTERNAL_ERROR`.
 
-### 4.6 `GET /health`
+### 4.7 `GET /health`
 
 ```json
 { "status": "ok", "upstream": "reachable", "smtp": "reachable" }
@@ -387,30 +504,54 @@ timed delay, no custom screen, no branding animation.
 |---|---|---|
 | Search bar | — | Always shown. Tapping navigates to Search. |
 | Recently viewed | Device-local | **Section hidden entirely** when the store is empty — i.e. on first run. |
-| Top rated (5) | `GET /home` | Error state with Retry if the call fails. |
-| Categories (chips) | `GET /home` | Horizontal chip row, in the thumb-reachable band. |
+| Top rated / Featured | `GET /home` | Section-level error with Retry if the call fails. |
+| One shelf per category | `GET /categories` | Section-level error with Retry if the call fails. |
 
-- Loading: shimmer per section. Recently viewed renders instantly (no network), so it is
-  visible while the rest shimmers.
-- The payload is cached, so returning from a product does **not** re-shimmer Home.
-- Section order is fixed: search → recently viewed → top rated → categories.
+**Two calls, fired in parallel, each owning its sections.** Neither waits on the other, so
+either can fail while the rest of the screen stays usable. Recently viewed is device-local
+and paints before either lands.
 
-**AC-2** With `FEATURED_PRODUCT_IDS` unset, Home shows the computed top 5 — or all
-products when the catalogue holds fewer than 5.
-**AC-2a** With it set, Home shows the configured ids that resolve, in configured order,
-and no others.
+- Section order is fixed: search → recently viewed → top rated → category shelves, in the
+  order §4.2 returns them.
+- **Every category is a shelf.** There is no chip row and no filter: each shelf carries a
+  **View all** into `category/{slug}` (§7.3). Nothing on the screen is hidden behind an
+  interaction, and **after first paint Home issues no further requests** — scrolling and
+  browsing it are free.
+- The shelf heading from `/home` is **"Top rated"** when `featured.source` is `computed`
+  and **"Featured"** when it is `curated` (§4.1). The client branches on `source`; it
+  never inspects the products to guess.
+- Loading: shimmer per section, one shared clock. Recently viewed renders instantly (no
+  network), so it is visible while the rest shimmers.
+- Both payloads are cached, so returning from a product does **not** re-shimmer Home.
+- When **both** calls fail, Home shows one error with one Retry, not two panels saying the
+  same thing.
+
+**AC-2** With `FEATURED_PRODUCT_IDS` unset, Home shows the computed top 5 under the
+heading "Top rated" — or all products when the catalogue holds fewer than 5.
+**AC-2a** With it set, Home shows the configured ids that resolve, in configured order and
+no others, under the heading "Featured".
 **AC-2c** A list containing duplicates shows each product once, at its first position.
 **AC-2d** A list longer than 5 shows only the first 5.
 **AC-2e** A list where some ids no longer resolve shows the remainder — fewer than 5,
 never backfilled with unconfigured products.
-**AC-2f** A list where no id resolves falls back to the computed top 5; Home is never
-empty and never 5xx.
+**AC-2f** A list where no id resolves falls back to the computed top 5, reports
+`source: "computed"`, and is headed "Top rated"; Home is never empty and never 5xx.
 **AC-2b** Ranking is deterministic: two products with an equal `rate` order by `count`
 desc, then `id` asc.
 **AC-3** Recently viewed is absent on first run and present, newest-first, after viewing a
 product.
 **AC-4** Returning to Home from a product shows content immediately, not a shimmer.
-**AC-5** A failed `GET /home` shows a retryable error, not a blank screen.
+**AC-5** A failed `GET /home` shows a retryable error scoped to its own section, not a
+blank screen.
+**AC-23** Home renders one shelf per category returned by §4.2, in that order.
+**AC-24** A shelf shows every product the response carried for it, up to 5, and is never
+padded to a fixed count; a category of 2 renders 2 cards.
+**AC-25** After first paint, scrolling and browsing Home issue no further network
+requests.
+**AC-26** The two calls fail independently: one failing leaves the other's sections fully
+usable, and its Retry re-runs only the call that failed. When both fail, Home shows a
+single error and a single Retry.
+**AC-27** A shelf's **View all** opens `category/{slug}` for that shelf's category.
 
 ### 7.3 Category — `category/{slug}`
 
@@ -449,6 +590,14 @@ full catalogue when a term was entered.
   from the caller.
 - Shows image, title, price with currency, category, rating (`rate` and `count`),
   description.
+- **The image is inset on a panel, never full-bleed.** Upstream images top out at 646 px
+  on the long edge (§10.5); a full-width hero at 360dp is 1080 px at xxhdpi and would
+  upscale visibly. Drawn at roughly 240dp, it is close to native.
+- **The displayed price is captured into the enquiry draft on navigation**, and is what
+  `seenPrice` carries (§3). It is the price *this customer saw*; re-reading it when the
+  enquiry screen resolves the product would compare the backend against itself and always
+  agree, making the drift note worthless. If the draft holds no price — a cold restore
+  after process death — `seenPrice` is omitted, which §6 already tolerates.
 - **"Enquire" is pinned to a sticky bottom bar** within thumb reach, never inline at the
   end of the scroll. Scroll content is bottom-padded so nothing hides behind it.
 - On successful load, the product is recorded to the device-local recently-viewed store.
@@ -460,7 +609,23 @@ full catalogue when a term was entered.
 
 ### 7.6 Enquiry — `product/{id}/enquire`
 
-A full screen, not a sheet. Two modes:
+A full screen, not a sheet.
+
+**It resolves its own product.** Routes carry primitives only (§8), so this route arrives
+holding an id and calls `GET /products/{id}` (§4.5) for the title, price and image shown
+above the form — an enquiry with no visible subject is a form the customer cannot check
+before sending. Sharing a ViewModel with the product screen would save one request and
+break the property that makes every route addressable by URL alone.
+
+That gives this screen two states **before the form is usable**:
+
+| Product resolution | Screen shows |
+|---|---|
+| In flight | The form, inert: fields visible, Submit disabled, product header shimmering |
+| `NOT_FOUND` | "This product is no longer available", one action back. No form, no Retry |
+| `UPSTREAM_UNAVAILABLE` / network | Full-screen retryable error; the form is not composed |
+
+Two modes once resolved:
 
 **First enquiry (no saved details)** — the full form: name*, email*, phone, message, plus
 a **"Remember my details" checkbox, default on and visible**.
@@ -530,6 +695,10 @@ values. Restoration reads `submitted` **first**:
 Restoring field values without checking `submitted` would present a filled form with an
 active Submit button for an enquiry that has already been sent, inviting a duplicate.
 
+**AC-28** The enquiry screen loads its product from its id alone, with no object passed
+from the product screen.
+**AC-29** While the product is resolving, Submit is disabled; an unresolvable product
+shows the unavailable state instead of a submittable form.
 **AC-12** The thank-you state appears only after the backend confirms SMTP acceptance.
 **AC-13** A send failure leaves every entered value in place and offers Retry.
 **AC-14** A validation failure shows each message under its own input.
@@ -582,6 +751,10 @@ returning empty — a corrupt store degrades a row, it never crashes a screen.
 | Cap | 10, LRU eviction |
 | De-dupe | Re-viewing moves the existing entry to the front; never duplicates |
 | Order | `viewedAt` desc |
+
+The snapshot holds **no rating**, so `ProductCard` takes an optional rating and omits the
+star line for these cards. Storing a rating would put a value on the device that nothing
+revalidates.
 
 A denormalised snapshot is stored rather than ids alone, so the row renders with zero
 network calls. A stored price can therefore go stale; tapping through fetches fresh data,
@@ -673,7 +846,37 @@ it the one genuinely abusable surface in the system, and it is specified accordi
   placeholder; real values stay local.
 - The client never calls Fake Store directly; our backend is the only upstream it knows.
 
-### 10.4 Operability
+### 10.4 Imagery and formatting
+
+**Images are the payload.** Measured across the live catalogue: each product image is only
+~0.25 MP (370–640 px wide, 333–646 px tall) but ships as an 8-bit RGBA PNG at 105–465 KB,
+median 238 KB — roughly eight times the same picture as JPEG. Home requests 18 distinct
+images, about **4.3 MB against 10.6 KB of JSON**. The format is upstream's and not ours to
+fix; what follows is how the client behaves given it.
+
+- **`ContentScale.Fit`, never `Crop`.** Aspect ratios run **0.58 to 1.92** — fourteen
+  portrait, six landscape, mixed inside one shelf, and one landscape image sits in the
+  global top five. Cropping the widest to a square discards 48% of it, and on a product
+  photographed end to end against white that removes the product. Every thumbnail fits
+  inside a square `surfaceContainerHigh` panel, which is why that panel is a visible
+  surface rather than a placeholder waiting to be covered.
+- **Every request declares the size it draws**, so decode is bounded by the view and not
+  by the file. Thumbnail and hero are separate requests at different sizes.
+- A placeholder holds the panel from first layout, so a shelf never shifts as images
+  arrive.
+- The image host sends `cache-control: public, max-age=14400`, so the disk cache carries a
+  returning customer for four hours with no network.
+- **Out of scope, stated:** a resizing image proxy on our backend would serve thumbnails
+  at the drawn size. That is a service of its own and is named as the next step rather
+  than attempted.
+
+**Prices are formatted from the response, never the locale.** `currency` is always `USD`
+while the device may be anywhere; the platform's default currency formatter would render
+`$55.99` as `₹55.99` on an Indian device — the right symbol for the wrong currency, beside
+a Send button. One `formatPrice(price, currency)` in `ui/designsystem` is driven by the
+response's `currency`, and every price on every screen goes through it.
+
+### 10.5 Operability
 
 `docker compose up` brings the API and Mailhog up from a clean checkout in under 10
 minutes, per AGENTS.md.
@@ -690,10 +893,11 @@ decides what is worth testing.
 
 | Layer | Covers | Why here |
 |---|---|---|
-| **Backend unit** | Ranking and tie-breaks (§4.1); featured-id override and its fallback; category top/additional split; search filtering; validation rules (§6); error → envelope mapping | Pure functions over fixed input. Fastest feedback, and these hold the rules most likely to be changed. |
+| **Backend unit** | Ranking and tie-breaks (§4.1); featured-id override, its fallback, and the `source` it reports; the per-category shelf cut in §4.2; category top/additional split; search filtering; validation rules (§6); error → envelope mapping | Pure functions over fixed input. Fastest feedback, and these hold the rules most likely to be changed. |
 | **Backend integration** | `POST /enquiries` end to end against a stubbed SMTP: 2xx only after acceptance, `EMAIL_SEND_FAILED` on rejection, backend-resolved price in the email body, `VALIDATION_FAILED` shape with dotted `fieldErrors` keys, rate limiting | The enquiry path is the only state-changing flow and the only one that can send real email. |
-| **Backend contract** | Every endpoint returns a well-formed envelope; `data`/`error` mutually exclusive; `developerMessage` carries no stack frame. **Plus the paths no route handler owns:** an oversized body, a malformed body, an unknown route and a wrong verb each return a valid envelope | One test guards the invariant every client behaviour depends on — including the framework-generated responses that are the easiest place for it to break. |
-| **Client unit** | Use cases; ViewModel transitions (loading → content / empty / error); envelope → sealed-result mapping; recently-viewed LRU, cap and de-dupe; draft restore honouring `submitted` | The logic that is wrong silently. All in `commonMain`, so it runs without a device. |
+| **Backend adapter** | Upstream `200` with an empty body and `200 []` map to domain not-found and empty, never to a thrown parse — asserted against recorded upstream responses | The one place where upstream's refusal to use status codes can turn a missing product into a 500. |
+| **Backend contract** | Every endpoint returns a well-formed envelope; `data`/`error` mutually exclusive; `developerMessage` carries no stack frame; list endpoints return `ProductSummary` and never `description`, while `GET /products/{id}` always does. **Plus the paths no route handler owns:** an oversized body, a malformed body, an unknown route and a wrong verb each return a valid envelope | One test guards the invariant every client behaviour depends on — including the framework-generated responses that are the easiest place for it to break. |
+| **Client unit** | Use cases; ViewModel transitions (loading → content / empty / error); Home's two calls failing independently; the shelf heading branching on `featured.source`; envelope → sealed-result mapping; recently-viewed LRU, cap and de-dupe; draft restore honouring `submitted` | The logic that is wrong silently. All in `commonMain`, so it runs without a device. |
 
 ### 11.2 Deliberately not tested
 
@@ -719,17 +923,18 @@ not merely the ability to navigate to the screen.
 
 | Required capability | Where specified | Acceptance criteria |
 |---|---|---|
-| Home shows the 5 chosen/top-rated products | §7.2, §4.1 | AC-2, AC-2a, AC-2b, AC-5 |
-| Category page: top rated + additional products | §7.3, §4.2 | AC-6, AC-6a, AC-6b, AC-6c |
-| Search shows only products matching the term | §7.4, §4.3 | AC-7, AC-8, AC-8a, AC-8b, AC-8c |
-| Product detail page | §7.5, §4.4 | AC-9, AC-10, AC-11 |
-| Enquiry → sales inbox email + "Thank you" | §7.6, §4.5 | AC-12 … AC-22 |
+| Home shows the 5 chosen/top-rated products | §7.2, §4.1 | AC-2, AC-2a, AC-2b, AC-2f, AC-5 |
+| Home browses the whole catalogue by category | §7.2, §4.2 | AC-23, AC-24, AC-25, AC-26, AC-27 |
+| Category page: top rated + additional products | §7.3, §4.3 | AC-6, AC-6a, AC-6b, AC-6c |
+| Search shows only products matching the term | §7.4, §4.4 | AC-7, AC-8, AC-8a, AC-8b, AC-8c |
+| Product detail page | §7.5, §4.5 | AC-9, AC-10, AC-11 |
+| Enquiry → sales inbox email + "Thank you" | §7.6, §4.6 | AC-12 … AC-22, AC-28, AC-29 |
 | Swappable product data source | §4, §11.1, AGENTS.md | AC-2a (config-driven selection) |
-| Swappable email provider | §4.5, §11.1 | AC-12 |
+| Swappable email provider | §4.6, §11.1 | AC-12 |
 | Evolving look and feel | §7, §10.1 | AC-10 |
 | Runs locally in under 10 minutes | §10.4, README | — (verified by dry-run) |
 | Confidence to change the code | §11 | — (the test suite itself) |
 
 **Scored areas and where each is addressed:** solution design → §3–§5, §8;
-decisions and assumptions → DECISIONS.md; implementation quality → §5, §6, §10.3;
+decisions and assumptions → DECISIONS.md; implementation quality → §5, §6, §10.3, §10.4;
 testing → §11; AI engineering practice → AI_USAGE.md.

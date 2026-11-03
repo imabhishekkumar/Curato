@@ -75,11 +75,11 @@ and acceptance criteria, in [SPEC.md](SPEC.md) §7.
 
 ```
 Splash (platform API)
-  └─ Home ──────────────────┬─ [category chip]  → Category
+  └─ Home ──────────────────┬─ [View all]       → Category
      • search bar           ├─ [search submit]  → Search Results
      • Recently viewed      ├─ [product tile]   → Product
-     • Top rated (5)        └─
-     • Categories (chips)
+     • Top rated / Featured └─
+     • A shelf per category
 
   Category / Search Results ─ [tile] ──→ Product
 
@@ -121,15 +121,36 @@ of a refactor, at zero cost today:
 
 ## Category surfacing
 
-Categories appear on Home as a **horizontal chip row**. Without a home-screen surface the
-category page is unreachable — the feature list said it opens "from a category link" but
-no screen hosted one.
+**Every category is a shelf on Home** — a section header, a horizontal row of up to five
+products, and a **View all** into the category screen. Without a home-screen surface the
+category page is unreachable; the feature list said it opens "from a category link" but no
+screen hosted one.
 
-Fake Store has exactly four categories, so a chip row fits without scrolling and costs one
-line of vertical space. A 2x2 card grid with imagery would look better but Fake Store
-provides no per-category image (we would have to borrow a product's), and it costs more
-vertical space in the thumb-reachable band. Chips now; the grid is a component swap inside
-`ui/designsystem` later, which is the point of having that package.
+A chip row that filtered in place was the alternative, and it is worse on two counts.
+Interaction: four categories would sit behind a tap, and selecting one would need a
+request, a loading state, a per-slug cache and a failure state — four pieces of machinery
+on the screen that must never look broken. Content: with one shelf visible, Home is two
+sections deep and has almost nothing to scroll. Shelves put the whole catalogue on the
+first screen, remove every one of those states, and leave the section headers as the only
+navigation — a chip row *and* headers would be two ways to reach the same four
+destinations.
+
+**This is what makes Home two calls rather than one.** `GET /home` returns the global
+shelf; `GET /categories` returns every category with the head of its ranking. They are
+fired in parallel, neither waiting on the other, and each owns its own sections — so one
+can fail while the rest of the screen stays usable. Because every shelf's products arrive
+together, **no interaction on Home costs a request**: after first paint, scrolling and
+browsing are free. Contracts in [SPEC.md](SPEC.md) §4.1–§4.2, states in §7.2.
+
+The cost is bounded and measured. Four categories of five is 18 cards; the whole upstream
+catalogue is 10.6 KB of JSON in one call. It stops being free at roughly ten categories,
+where the answer is to load shelves lazily as they scroll into view — which a
+section-per-category layout supports without restructuring, and a chip filter would not
+have.
+
+A shelf is a selection, not the category. Electronics and women's clothing hold six
+products each, so one product in each is reachable only through search or View all.
+Raising the shelf to six would render this catalogue in full and make View all pointless.
 
 ## API contract
 
@@ -174,6 +195,13 @@ always knows the shape it is parsing:
 - `traceId` correlates a customer-visible failure with the server log holding the real
   cause — which is what lets `developerMessage` stay sanitized without losing
   diagnosability.
+- **List endpoints return `ProductSummary`, the product screen returns `Product`.** The
+  only difference is `description`, which no card renders and which is 60% of a list
+  payload. Deliberately two fixed shapes rather than one shape and a `?lightweight=true`
+  flag: a flag makes the response conditional, so `description` becomes optional on a type
+  the product screen requires it on, the DTO stops describing what a caller will receive,
+  and every endpoint needs contract tests twice. The honesty matters more than the 6 KB —
+  an endpoint whose callers render cards should not return a field no card can show.
 - `data` and `error` are mutually exclusive and both always present with one null, so the
   client is one generic `ApiResponse<T>` with nullable fields — no polymorphic
   deserializer — mapped once into a sealed result type that every repository reuses. That
@@ -187,15 +215,24 @@ always knows the shape it is parsing:
 
 | Endpoint | Returns |
 |---|---|
-| `GET /home` | `{ topRated[], categories[] }` |
+| `GET /home` | `{ featured: { source, products[] } }` |
+| `GET /categories` | `{ categories: [{ category: { slug, name }, topRated[] }] }` |
 | `GET /categories/:slug/products` | `{ category: { slug, name }, topRated[], additional[] }` |
 | `GET /products/search?q=` | `{ query, results[] }` |
-| `GET /products/:id` | a single product |
+| `GET /products/:id` | a single product, the only one carrying `description` |
 | `POST /enquiries` | 2xx only once SMTP has accepted the message |
 
-- **Home is one aggregate call**, not three parallel ones: one round trip on the critical
-  path, the backend owns composition, and it has to fetch the full product list to rank it
-  anyway. It also removes the need for a standalone `GET /categories`.
+- **Home is two calls in parallel**, not one aggregate. An earlier shape folded the
+  category list into `/home`; putting a shelf of products under every category made that
+  aggregate the whole screen, and splitting it buys three things: the category list lives
+  in exactly one response and cannot disagree with itself, neither call blocks the other,
+  and each owns its own sections so one can fail while the rest of Home stays usable.
+  Reasoning in full under "Category surfacing" above.
+- **`featured.source` tells the client which rule produced the shelf** — `computed` or
+  `curated` — so it can head the section "Top rated" or "Featured". Without it a curated
+  list sits under a heading claiming a ranking it does not have:
+  `FEATURED_PRODUCT_IDS=8,4` resolves to the two lowest-rated products in the catalogue.
+  The backend sends the discriminator, never the copy.
 - **Ranking happens on the backend**, which returns pre-ranked, pre-split payloads. The
   ranking rule is business logic, and the brief's premise is that things change — if "top
   rated" later means rating x review count, or becomes editorially curated, that ships as
@@ -270,8 +307,10 @@ app and is worth optimizing hard.
   system gesture, so top-left being outside thumb reach is acceptable.
 - **48dp minimum touch targets**, enforced in the design-system components rather than
   applied per screen.
-- **Category chips sit in the reachable mid-screen band** — which is also where the
-  recently-viewed row pushes them.
+- **Category shelves scroll into the reachable band** rather than occupying a fixed
+  position. Nothing on Home needs a precise tap: a shelf's tiles and its View all are both
+  large targets, and the one control that must always be reachable — Product's "Enquire" —
+  is pinned instead.
 - Beyond reachability: `contentDescription` on product images and icon buttons, section
   titles as semantic headings, **labels on form fields rather than placeholder-only**
   (placeholders vanish on focus and are read unreliably), errors as `supportingText`
@@ -467,7 +506,10 @@ both as next steps. Actual time spent is recorded in [README.md](README.md).
 - Add Compose UI instrumentation tests over the critical screens (deliberately cut from
   this submission — see "Testing" below).
 - Register deeplinks once a domain exists — the routes already accept them.
-- Replace the category chip row with a card grid once per-category imagery exists.
+- Load category shelves lazily as they scroll into view, once the catalogue outgrows a
+  single `GET /categories` response.
+- Serve resized thumbnails from our own backend. Upstream images are ~0.25 MP shipped as
+  RGBA PNGs at a median 238 KB — Home pulls about 4.3 MB of them against 10.6 KB of JSON.
 - Track product views server-side as telemetry, if that becomes a goal, rather than
   relying on the device-local recently-viewed list.
 - Swap Mailhog for a real transactional email provider behind the existing

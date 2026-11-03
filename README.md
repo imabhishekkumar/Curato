@@ -33,17 +33,22 @@ validation rules and acceptance criteria.
 See [DECISIONS.md](DECISIONS.md) for why, and what was assumed or cut along the way.
 See [AGENTS.md](AGENTS.md) for the rules any AI coding agent follows in this repo.
 See [AI_USAGE.md](AI_USAGE.md) for how AI tooling was used.
+See the [Curato Screen Kit](https://claude.ai/artifact/7bKjCMsswvdLHqWAo9DiqB) for the
+visual design — every screen and state, the colour, type and metric tokens, and the
+component inventory they are drawn from.
 
 ## Features
 
 - **Splash → Home** — the platform splash screen hands straight off to Home; no timed
   delay. Sections shimmer independently while loading.
-- **Home** — a search bar, your recently viewed products, the 5 top-rated products, and a
-  category chip row.
+- **Home** — a search bar, your recently viewed products, the 5 top-rated products, and
+  then every category as its own shelf, each with a "View all". The whole catalogue is on
+  the first screen; nothing is hidden behind a tap, and once it has loaded, browsing it
+  costs no further requests.
 - **Recently viewed** — the products you have opened, newest first, kept on the device
   only (no account, no tracking). Renders without a network call, so it works offline.
-- **Category page** — opened from a category chip; shows the top-rated products in that
-  category plus the remaining ones.
+- **Category page** — opened from a shelf's "View all"; shows the top-rated products in
+  that category plus the remaining ones.
 - **Search** — enter a term and search; results open on their own screen, so going back
   from a product returns you to your results rather than a reset home screen.
 - **Product page** — full details, with "Enquire" pinned to the bottom of the screen
@@ -116,7 +121,7 @@ Every variable lives in `.env.example` with a safe placeholder. No secrets are c
 | `CACHE_TTL_SECONDS` | Product-list cache lifetime (default 300) |
 | `CACHE_MAX_STALE_SECONDS` | How long cached data may still be served when the upstream is unreachable |
 | `MAX_REQUEST_BODY_BYTES` | Body size cap; larger requests are rejected before parsing |
-| `FEATURED_PRODUCT_IDS` | Comma-separated ids for the home page. **Unset = computed top 5 by rating** |
+| `FEATURED_PRODUCT_IDS` | Comma-separated ids for the home page. **Unset = computed top 5 by rating.** Setting it also changes the shelf heading from "Top rated" to "Featured", since a curated list is not a ranking |
 | `SMTP_HOST` / `SMTP_PORT` | Mailhog locally; a real provider later |
 | `SALES_INBOX_ADDRESS` | Where enquiries are delivered |
 | `ENQUIRY_RATE_LIMIT` / `ENQUIRY_RATE_WINDOW_S` | Abuse control on the enquiry endpoint |
@@ -148,17 +153,21 @@ it.
 
 | Endpoint | Returns |
 |---|---|
-| `GET /home` | `{ topRated[], categories[] }` |
+| `GET /home` | `{ featured: { source, products[] } }` |
+| `GET /categories` | `{ categories: [{ category, topRated[] }] }` |
 | `GET /categories/:slug/products` | `{ category, topRated[], additional[] }` |
 | `GET /products/search?q=` | `{ query, results[] }` |
-| `GET /products/:id` | a single product |
+| `GET /products/:id` | a single product, the only one carrying `description` |
 | `POST /enquiries` | 2xx only once SMTP has accepted the message |
 | `GET /health` | `{ status, upstream, smtp }` — used by the compose healthcheck |
 
+Home opens the first two in parallel; every endpoint that returns a **list** returns
+products without `description`, since no card renders one.
+
 Full endpoint contracts, the error-code registry and validation rules are in
 [SPEC.md](SPEC.md) §4–§6. See [DECISIONS.md](DECISIONS.md) for why the envelope has one
-user-facing string, why ranking happens on the backend, and why Home is a single
-aggregate call.
+user-facing string, why ranking happens on the backend, and why Home is two parallel
+calls rather than one aggregate.
 
 ## Where to change things
 
@@ -171,8 +180,8 @@ require reading the whole repo first.
 | How "top rated" is ranked | The ranking function in the backend's product service (one place; the client never ranks) |
 | The product data source | Add a `ProductRepository` implementation; swap the binding. Routes and client untouched |
 | The email provider | Add an `EmailService` implementation; swap the binding |
-| A field on the product | Backend DTO + mapper, then the client DTO + domain model — the API contract in [SPEC.md](SPEC.md) §3 is the checklist |
-| Colours, type, spacing | Theme tokens in `ui/designsystem` — not individual screens |
+| A field on the product | Backend DTO + mapper, then the client DTO + domain model — the API contract in [SPEC.md](SPEC.md) §3 is the checklist. Decide first whether the field belongs on `ProductSummary` (every list) or only on `Product` (the product screen) |
+| Colours, type, spacing | Theme tokens in `ui/designsystem` — not individual screens. The token values are in the [Screen Kit](https://claude.ai/artifact/7bKjCMsswvdLHqWAo9DiqB) |
 | A reusable component | `ui/designsystem`; screens compose it rather than styling inline |
 | Copy shown on an error | `userMessage` on the backend, so it changes without a client release |
 | Adding a screen | A new route taking primitives only, a ViewModel exposing `StateFlow<UiState>`, and a Compose screen |

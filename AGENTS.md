@@ -71,8 +71,8 @@ Settled before scaffolding. Screen-by-screen states and acceptance criteria are 
 journey and navigation". In short:
 
 ```
-Splash → Home (search bar · recently viewed · top rated · category chips)
-Home → Search Results | Category | Product
+Splash → Home (search bar · recently viewed · top rated · a shelf per category)
+Home → Search Results | Category (via View all) | Product
 Category / Search Results → Product
 Product → Enquiry → Thank you (pops back to Product)
 ```

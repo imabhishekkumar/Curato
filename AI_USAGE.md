@@ -39,7 +39,7 @@ contradicted.
 
 ## Key prompts / moments that shaped the solution
 
-The five that changed the shape of the solution, rather than its details.
+The six that changed the shape of the solution, rather than its details.
 
 1. **Backend as the boundary.** Putting `ProductRepository` and `EmailService` behind
    interfaces, in response to the requirement for a foundation that can grow rather than
@@ -74,6 +74,14 @@ The five that changed the shape of the solution, rather than its details.
    reviewer following our README would fail to connect the Android emulator to the
    backend for two reasons we had never written down. Corrected while the repo still had
    zero commits.
+
+6. **Designing every screen before writing the backend.** Drawing all six routes and
+   each state they can reach — as a rendered design kit rather than a description —
+   settled questions the contract had left to the implementation, and changed it. Home
+   became a shelf per category rather than a filter, which split `GET /home` and added
+   `GET /categories`; the enquiry screen turned out to need product data its route cannot
+   carry; and list endpoints stopped returning a `description` no card renders. Each of
+   those is cheaper as a drawing than as a migration.
 
 _Also shaped by:_ making AI-usage logging an unprompted agreement in AGENTS.md so this
 log is a by-product of the work rather than a reconstruction; adding a "Start here"
@@ -122,3 +130,26 @@ _Appended as the build progresses._
 - **The category page was unreachable.** Documented as opening "from a category link"
   with no screen hosting one. Same cause, same catch — surfaced only by tracing the flow
   screen by screen.
+
+- **Upstream behaviour was assumed rather than checked.** The spec treated an unknown
+  product id as an upstream error. Probing the live Fake Store API showed it answers
+  `/products/999` with `200` and an empty body, and an unknown category with `200 []` —
+  so a naive parse throws and a missing product reaches the customer as `INTERNAL_ERROR`
+  (500) with a Retry that cannot help. The adapter now translates absence rather than
+  trusting status codes. Nothing in the docs had been wrong on its face; it had simply
+  never been verified against the thing it describes.
+
+- **A shelf heading that could state something false.** `GET /home` returned one field
+  named `topRated` for two different rules. With `FEATURED_PRODUCT_IDS` set, the list is
+  curated and not ranked at all — `8,4` resolves to the two lowest-rated products in the
+  catalogue, under a heading reading "Top rated". Caught by asking what the screen
+  claims rather than what the endpoint returns. The response now reports which rule
+  produced it and the client picks the heading.
+
+- **Quantities asserted from memory, then contradicted by measurement.** Two numbers
+  used to justify design choices were wrong: the Home card count (23, not 25) and the
+  source resolution of product imagery (~0.25 MP, not the 1500 px the filenames imply).
+  The second mattered — it had produced a recommendation about decode tuning, when the
+  real constraints are that the images are PNGs at eight times a comparable JPEG and
+  that their aspect ratios span 0.58 to 1.92, which is what rules out cropping them to
+  square. Caught by measuring all twenty rather than reasoning about them.
