@@ -35,6 +35,11 @@ services:
 
   mailhog:
     image: mailhog/mailhog:v1.0.1
+    # Mailhog publishes amd64 only, so on Apple Silicon this runs emulated. Declared
+    # rather than left implicit: without it every `up` prints a platform-mismatch
+    # warning that reads like a misconfiguration. It costs startup time and a 572 MB
+    # image — see "Local SMTP catcher" in DECISIONS.md for the alternative.
+    platform: linux/amd64
     ports:
       # 1025 SMTP, 8025 web inbox.
       - '1025:1025'

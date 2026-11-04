@@ -2,11 +2,11 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: backend implemented and tested; Android client not started.**
-> The backend runs and its suite passes on Node 22 — see [Testing](#testing). Two things
-> are **not** yet verified: `docker compose up` (written, but Docker was unavailable on
-> the machine it was authored on) and anything client-side. Everything describing the
-> client below is the intended shape, not a built one.
+> **Status: backend implemented, tested and running under docker compose; Android
+> client not started.**
+> The suite passes on Node 22 and the stack comes up from a clean checkout — both
+> verified, see [Testing](#testing). Everything describing the **client** below is the
+> intended shape, not a built one.
 
 ## Stack, and why
 
@@ -73,8 +73,24 @@ error messages, and layouts respect large system font scales.
 
 ## Setup & running locally
 
-**Prerequisites:** Docker Desktop, and Android Studio with an emulator image. Nothing
+**Prerequisites:** a Docker daemon, and Android Studio with an emulator image. Nothing
 else — no accounts, no paid services, no API keys.
+
+Any Docker daemon works. This was verified with [Colima](https://github.com/abiosoft/colima)
+rather than Docker Desktop, because Docker Desktop's licence requires a paid subscription
+for larger organisations and this project commits to needing none:
+
+```bash
+brew install colima docker docker-compose
+colima start --cpu 2 --memory 4
+```
+
+Homebrew's Compose is a CLI plugin, so point Docker at it once — otherwise
+`docker compose` reports "is not a docker command":
+
+```bash
+mkdir -p ~/.docker && printf '{\n  "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]\n}\n' > ~/.docker/config.json
+```
 
 ### 1. Backend (~2 minutes)
 
@@ -95,9 +111,14 @@ you which, so read it rather than the status code.
 
 Mailhog's web inbox — where enquiry emails land — is at <http://localhost:8025>.
 
-**Not verified:** the compose path above is written but has not been run, because Docker
-was not installed on the machine the backend was authored on. To run the API directly
-instead, which *is* verified:
+Measured on a clean start — images pulled, both `npm ci` stages run, no build cache —
+**52 seconds from `docker compose up` to a healthy container** on an M-series Mac. The
+10-minute budget in [SPEC.md](SPEC.md) §10.5 has plenty of room.
+
+`docker compose stop` returns in under a second rather than hitting Docker's 10-second
+kill timeout, because the service handles SIGTERM and finishes in-flight requests first.
+
+To run the API without Docker instead:
 
 ```bash
 cd backend && nvm use && npm ci && npm run dev

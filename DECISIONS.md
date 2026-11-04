@@ -527,6 +527,34 @@ address for debug builds, so pointing the app at a different backend needs no co
 - No Compose UI instrumentation tests — see "Testing" above for the trade-off.
 - No CAPTCHA or bot detection on the enquiry form — see "Security posture".
 
+## Container runtime
+
+Verified with **Colima**, not Docker Desktop. Docker Desktop's licence requires a paid
+subscription for organisations past a size threshold, and this project commits to needing
+no accounts and no paid services anywhere in the stack — so standardising the setup
+instructions on it would contradict that commitment for exactly the reader most likely to
+be evaluating it from a company laptop. Colima is Apache-2.0, installs entirely inside
+Homebrew's prefix with no privileged helper and no password prompt, and exposes an
+ordinary Docker socket, so `docker compose` is the same command either way.
+
+Nothing in the compose file or the Dockerfile is Colima-specific. Docker Desktop, Rancher
+Desktop, Podman or a remote daemon all work; the README names Colima because it is what
+the measured numbers came from, not because it is required.
+
+## Local SMTP catcher
+
+Mailhog, kept despite being unmaintained and publishing an amd64-only image — which means
+emulation on Apple Silicon and a 572 MB pull against our own 257 MB service image. The
+platform is declared explicitly in the compose file so the mismatch is a stated fact
+rather than a warning on every `up` that reads like a misconfiguration.
+
+**Mailpit is the better choice and was not taken.** It is maintained, has native arm64
+images at roughly a tenth the size, and is a drop-in replacement on the same two ports.
+The reason to stay is that Mailhog is named throughout the specification, the README and
+the screen kit, and swapping it would edit four documents to change a development
+dependency that works. Worth doing the moment anything else about the mail path changes;
+not worth a doc sweep on its own.
+
 ## Infrastructure
 
 No cloud infrastructure is provisioned for this PoC — everything runs locally via

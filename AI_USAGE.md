@@ -197,3 +197,13 @@ measuring it.
   by a unit test that injected the exit function instead of letting it kill the process,
   and fixed with a latch so the first outcome wins.
 
+- **A stated prerequisite that contradicted a stated constraint.** The README listed
+  Docker Desktop as the prerequisite while AGENTS.md promises "no paid services or
+  sign-ups required anywhere in the stack". Docker Desktop's licence requires a paid
+  subscription past an organisation-size threshold, so the setup instructions broke the
+  project's own rule for precisely the reader most likely to be evaluating it from a
+  company laptop. Neither statement was wrong in isolation, which is why it survived
+  several passes over both files; it surfaced only when the stack was actually installed
+  and the licence had to be reckoned with. Now verified on Colima, with the runtime named
+  as a choice rather than a requirement.
+
