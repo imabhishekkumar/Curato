@@ -54,8 +54,11 @@ A product catalogue PoC: customers browse/search products and submit an enquiry.
 - `EmailService` interface → local dev implementation (Mailhog), swappable for a real
   provider later.
 
-**Client** — Clean Architecture + MVVM, single Gradle module with clean package
-boundaries (no multi-module split yet — not justified at this scope):
+**Client** — Clean Architecture + MVVM. Two Gradle modules, because AGP 9 forbids
+applying `com.android.application` alongside Kotlin Multiplatform: `:shared` holds every
+layer below, `:androidApp` is an Activity, an Application and a manifest with no logic.
+The architecture itself is **not** split into modules — these packages live together in
+`:shared/src/commonMain`:
 - `data/` — DTOs, repository implementations (Ktor client against our backend).
 - `domain/` — models, repository interfaces, use cases.
 - `presentation/` — ViewModels exposing `StateFlow<UiState>` per screen.

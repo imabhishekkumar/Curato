@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Debug only. Android 9+ blocks cleartext HTTP by default, so without this the emulator
+  reaches the backend and fails silently with no visible cause. Release builds never see
+  this file, so cleartext stays blocked there.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <!-- The host, as seen from inside the emulator. -->
+        <domain includeSubdomains="false">10.0.2.2</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Matches the light surface token from the screen kit, so the splash does not
+         flash a different background before the first Compose frame. -->
+    <color name="splash_background">#FBFCFA</color>
+</resources>

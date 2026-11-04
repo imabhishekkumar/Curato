@@ -112,6 +112,65 @@ about how to honour it that the spec deliberately left open.
   guessing a proxy depth that does not exist yet is how `trust proxy` becomes a
   header-spoofing hole.
 
+## Client toolchain
+
+Resolved against a real build rather than a compatibility table, because the current
+matrix is recent enough that guessing wastes more time than probing: **Gradle 9.8.2, AGP
+9.5.0, Kotlin 2.4.21, Compose Multiplatform 1.12.2, compileSdk 37, minSdk 26, JDK 21.**
+
+- **JDK 21 is pinned, not inherited.** This machine defaults to JDK 26, which AGP does
+  not support. `gradle/gradle-daemon-jvm.properties` states a version criterion rather
+  than a path, so the build does not depend on whoever set `JAVA_HOME` last and still
+  resolves against a locally installed JDK.
+- **Two modules, because AGP 9 requires it.** Since AGP 9.0 the `com.android.application`
+  plugin cannot be applied alongside Kotlin Multiplatform, so the Android entry point has
+  to be its own module: `:shared` holds every layer, `:androidApp` holds an Activity, an
+  Application and a manifest. The documented preference for a single module was about not
+  splitting the *architecture* into modules, and that still holds — `data`, `domain`,
+  `presentation` and `ui` remain one unit with package boundaries. The alternative was
+  AGP's `android.builtInKotlin=false` escape hatch, which its own error message calls a
+  temporary bypass.
+- **No `iosX64`.** Compose Multiplatform 1.12 stopped publishing artifacts for the Intel
+  simulator, so declaring the target fails to resolve. Device `iosArm64` and
+  `iosSimulatorArm64` are the two that exist.
+- **The iOS framework is linked in CI-able form, with no Xcode project.** `./gradlew
+  :shared:linkDebugFrameworkIosSimulatorArm64` is a check a reviewer can actually run,
+  which is worth more than an `iosApp/` directory nothing here can build.
+
+## Forward compatibility of the error contract
+
+`ErrorCode` carries an `UNKNOWN` member and parses any unrecognised wire value into it.
+
+The backend may add a code before the client is rebuilt — the two ship separately, and
+the whole point of branching on `code` rather than message text is that the contract can
+evolve. Without a fallback, a new code would fail deserialization and turn a
+forward-compatible API change into a crash on the screen that received it. Degrading to
+a generic retryable error is the behaviour a customer would choose.
+
+`developerMessage` is dropped at the mapping boundary rather than carried into the UI
+layer. It ships in the response body and is never displayed, so discarding it where the
+DTO becomes a domain error means no layer above can render it by accident.
+
+## Reaching the backend from a device
+
+The documented default is `http://10.0.2.2:8080` — inside the emulator, `localhost` is
+the emulator, and `10.0.2.2` is the host.
+
+**It does not work everywhere.** On the machine this was built on, the emulator's NAT
+answers ICMP but never completes a TCP connection to the host, so the app times out with
+the backend plainly running and the failure looks like an app bug. `adb reverse` tunnels
+over the adb connection instead, sidestepping the NAT entirely, and is also the route
+that works for a physical device over USB:
+
+```
+adb reverse tcp:8080 tcp:8080
+./gradlew :androidApp:installDebug -Pcurato.apiBaseUrl=http://localhost:8080
+```
+
+The base URL is a Gradle property feeding a build-config field, so neither path needs a
+code edit. Named here because a reviewer hitting the NAT problem would otherwise have no
+reason to suspect their emulator rather than the app.
+
 ## Design system
 
 Planned: a lightweight design system using Compose Material 3, with centralized theme

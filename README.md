@@ -2,11 +2,12 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: backend implemented, tested and running under docker compose; Android
-> client not started.**
-> The suite passes on Node 22 and the stack comes up from a clean checkout — both
-> verified, see [Testing](#testing). Everything describing the **client** below is the
-> intended shape, not a built one.
+> **Status: backend complete; client foundation and Home screen built and running.**
+> Verified on a device: the backend suite passes on Node 22, the stack comes up under
+> docker compose, and the Android app renders Home against it on an emulator with its
+> own 35 shared tests green on two targets. **Not yet built:** the Category, Search,
+> Product and Enquiry screens — their routes exist and navigate, but each shows a
+> placeholder.
 
 ## Stack, and why
 
@@ -73,8 +74,11 @@ error messages, and layouts respect large system font scales.
 
 ## Setup & running locally
 
-**Prerequisites:** a Docker daemon, and Android Studio with an emulator image. Nothing
-else — no accounts, no paid services, no API keys.
+**Prerequisites:** a Docker daemon, **JDK 21**, and Android Studio with an emulator
+image. Nothing else — no accounts, no paid services, no API keys.
+
+JDK 21 specifically: AGP does not support JDK 26, and the Gradle daemon is pinned to 21
+in `gradle/gradle-daemon-jvm.properties`. Any locally installed 21 satisfies it.
 
 Any Docker daemon works. This was verified with [Colima](https://github.com/abiosoft/colima)
 rather than Docker Desktop, because Docker Desktop's licence requires a paid subscription
@@ -130,7 +134,20 @@ one, and `/health` will report `smtp: unreachable` until it exists.
 ### 2. Android client (~5 minutes)
 
 Open the project in Android Studio, let Gradle sync, and run the `androidApp`
-configuration on an emulator.
+configuration on an emulator. Or from the command line:
+
+```bash
+./gradlew :androidApp:installDebug
+```
+
+**If Home shows "No connection" while the backend is plainly running**, the emulator's
+NAT is not completing TCP to the host — which happened on the machine this was built
+on. Tunnel over adb instead; this is also the route that works for a physical device:
+
+```bash
+adb reverse tcp:8080 tcp:8080
+./gradlew :androidApp:installDebug -Pcurato.apiBaseUrl=http://localhost:8080
+```
 
 > **Two things that will otherwise fail silently**, both to be configured in the debug
 > build — listed because they are the usual reason a local run "just doesn't work":
@@ -229,9 +246,31 @@ fake adapters.
 Run it with Node 22 (`.nvmrc` pins it). The container uses the same version, so the
 runtime a reviewer gets from `docker compose up` matches the one the suite ran on.
 
-### Client
+### Client (`shared/`, `androidApp/`)
 
-_Not started — see [AGENTS.md](AGENTS.md) for the intended shape._
+Two Gradle modules, because AGP 9 forbids applying `com.android.application` alongside
+Kotlin Multiplatform. The split is a toolchain requirement, not an architectural one:
+
+```
+shared/src/commonMain/kotlin/com/curato/
+  domain/        models, repository interfaces, use cases, ApiResult
+  data/          DTOs, the one envelope parser, mappers, Ktor client, DataStore
+  presentation/  ViewModels exposing StateFlow<UiState>
+  ui/            screens, navigation, and designsystem/ (theme + components)
+  di/            Koin modules
+shared/src/androidMain, iosMain   one file each: HTTP engine and storage path
+androidApp/                       an Activity, an Application, a manifest. No logic.
+```
+
+Every visual token and all nine components come from the
+[Screen Kit](https://claude.ai/artifact/7bKjCMsswvdLHqWAo9DiqB) rather than from taste —
+colour, the Inter type scale with tabular figures, the 4dp spacing base, radii, motion
+durations and the 48dp touch-target floor.
+
+**Built:** the design system, the network and envelope layer, DI, navigation, the
+device-local recently-viewed store, and Home. **Not built:** Category, Search, Product
+and Enquiry — their routes exist and carry the right primitives, but each renders a
+placeholder naming the parameter it resolved.
 
 ## Where to change things
 
@@ -255,9 +294,9 @@ require reading the whole repo first.
 ## Testing
 
 ```bash
-cd backend && nvm use && npm ci
-npm run typecheck
-npm test
+cd backend && nvm use && npm ci && npm run typecheck && npm test   # 216 tests
+./gradlew :shared:allTests                                          # 35, on two targets
+./gradlew :shared:linkDebugFrameworkIosSimulatorArm64               # proves iOS compiles
 ```
 
 The whole suite runs in under a second with no network, no SMTP and no emulator, which is
@@ -280,9 +319,13 @@ and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
   stay mutually exclusive, `developerMessage` carries no stack frame, and list endpoints
   never carry `description`. Plus the four paths no route handler owns: an oversized body,
   a malformed body, an unknown route and a wrong verb.
-- **Client unit** — _not started._ Use cases, ViewModel state transitions,
-  envelope-to-result mapping, recently-viewed LRU and de-dupe, draft restore honouring
-  submitted state. All in `commonMain`, so no device is needed.
+- **Client unit** — the envelope-to-result mapping including a code this build does not
+  know; Home's two calls failing independently and a Retry re-running only the one that
+  failed; the shelf heading branching on `featured.source`; recently-viewed LRU, cap,
+  de-dupe and corrupt-payload handling; locale-independent price formatting. All in
+  `commonMain`, so they run with no device — and they run on **both** the Android host
+  and the iOS simulator, so a platform-specific regression fails the suite rather than
+  a screen. Still to come with their screens: search and enquiry-draft coverage.
 - **Not covered: Compose UI instrumentation tests.** A deliberate cut — emulator-bound,
   slow, and the budget buys more confidence as unit coverage of the rules. Layout
   regressions are caught by eye, not CI.

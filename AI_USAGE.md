@@ -207,3 +207,28 @@ measuring it.
   and the licence had to be reckoned with. Now verified on Colima, with the runtime named
   as a choice rather than a requirement.
 
+- **A dependency-injection graph where a type depended on itself.** The shared Koin
+  module registered `HttpClient` built from `createHttpClient(get())`, while each
+  platform module also registered an `HttpClient` for its engine. Resolving the
+  singleton therefore asked the container for the very type it was constructing, and
+  the app died on launch with a `StackOverflowError` several hundred frames deep in
+  Koin. Nothing about it is visible in a compile: the types line up, and the recursion
+  only exists at resolution time. It surfaced the first time the app was actually run
+  on a device, which is the argument for running it rather than trusting a green build.
+  The platform half now supplies `HttpClientEngine` — a different type — so the cycle
+  cannot be expressed.
+
+- **Tests that were green on the platform that does not ship.** `commonTest` compiled
+  and ran for the iOS simulator only, because the AGP Kotlin-Multiplatform library
+  plugin does not enable host-side unit tests unless asked. Thirty-five passing tests
+  said nothing about Android, which is the only target this submission claims to
+  validate. Caught by reading which Gradle tasks had actually executed rather than the
+  reassuring summary line. Both targets now run the same suite.
+
+- **An iOS compile caught a portability bug the Android build hid.** Navigation
+  arguments were read with `getString`/`getInt`, which exist on Android's `Bundle` but
+  not on the multiplatform `SavedState` the shared code actually receives. The Android
+  build was perfectly happy; `linkDebugFrameworkIosSimulatorArm64` was not. This is the
+  concrete return on declaring the iOS target rather than merely intending to — the
+  claim that the shared layer is portable gets checked instead of asserted.
+
