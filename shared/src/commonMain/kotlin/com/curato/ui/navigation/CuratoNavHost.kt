@@ -1,7 +1,5 @@
 package com.curato.ui.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -15,11 +13,12 @@ import androidx.navigation.navArgument
 import io.ktor.http.encodeURLParameter
 import androidx.savedstate.read
 import com.curato.presentation.category.CategoryViewModel
+import com.curato.presentation.enquiry.EnquiryViewModel
 import com.curato.presentation.home.HomeViewModel
 import com.curato.presentation.product.ProductViewModel
 import com.curato.presentation.search.SearchViewModel
 import com.curato.ui.category.CategoryScreen
-import com.curato.ui.designsystem.StatePanel
+import com.curato.ui.enquiry.EnquiryScreen
 import com.curato.ui.home.HomeScreen
 import com.curato.ui.product.ProductScreen
 import com.curato.ui.search.SearchScreen
@@ -155,9 +154,6 @@ fun CuratoNavHost(
             )
         }
 
-        // Declared with its parameter types so the tap navigates for real rather than into
-        // nothing. Replaced by its screen in the next pass.
-
         composable(
             route = Routes.ENQUIRE,
             arguments = listOf(
@@ -168,29 +164,43 @@ fun CuratoNavHost(
                 navArgument("seenPrice") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
-            val id = entry.arguments?.read { getIntOrNull("id") }
+            val id = entry.arguments?.read { getIntOrNull("id") } ?: 0
+            // Unparseable is treated as absent rather than as an error: §3 and §6 make
+            // `seenPrice` a diagnostic the backend never trusts, so a route carrying
+            // nonsense must still produce a working enquiry — the email simply has no
+            // drift note.
             val seenPrice = entry.arguments
                 ?.read { getStringOrNull("seenPrice") }
                 ?.toDoubleOrNull()
-            NotBuiltYet("Enquiry", "product $id, seen price ${seenPrice ?: "not captured"}")
-        }
-    }
-}
 
-/**
- * A placeholder that is honest about being one.
- *
- * It shows the route's parameter, which makes it a working check that routes really do
- * carry primitives and that Home is navigating with the right ones.
- */
-@Composable
-private fun NotBuiltYet(screen: String, argument: String?) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        StatePanel(
-            glyph = "🚧",
-            title = "$screen is not built yet",
-            body = argument?.let { "This route resolved with: $it" }
-                ?: "This route carries no parameter.",
-        )
+            // The id is a parameter and the draft lives in the handle — the only screen
+            // that needs both, because its route parameter is fixed while its *contents*
+            // are being typed (SPEC.md §7.6).
+            val viewModel: EnquiryViewModel = koinViewModel {
+                parametersOf(id, seenPrice, entry.savedStateHandle)
+            }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+
+            // Both exits pop, and that is the whole of AC-15: the thank-you is a *state*
+            // of this route rather than a destination, so there is no submitted form left
+            // on the stack for back to land on. The two callbacks differ only in the copy
+            // of the control that triggers them.
+            val backToProduct = { navController.popBackStack(); Unit }
+
+            EnquiryScreen(
+                state = state,
+                onNameChange = viewModel::onNameChange,
+                onEmailChange = viewModel::onEmailChange,
+                onPhoneChange = viewModel::onPhoneChange,
+                onMessageChange = viewModel::onMessageChange,
+                onFieldBlur = viewModel::onFieldBlur,
+                onConsentChange = viewModel::onConsentChange,
+                onEditContact = viewModel::onEditContact,
+                onSubmit = viewModel::submit,
+                onRetryLoad = viewModel::load,
+                onBackToProduct = backToProduct,
+                onBack = backToProduct,
+            )
+        }
     }
 }

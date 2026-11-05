@@ -115,3 +115,43 @@ data class SearchResultsDto(
     val query: String,
     val results: List<ProductSummaryDto>,
 )
+
+/**
+ * `POST /enquiries` request (SPEC.md §3) — the one body this client ever sends.
+ *
+ * [seenPrice] and [ContactDto.phone] are nullable with a `null` default, and the client's
+ * `Json` is configured `explicitNulls = false`, so an absent optional is **omitted from
+ * the body** rather than sent as `null`. That distinction is the contract: §6 says an
+ * absent `seenPrice` is ignored rather than rejected, and the backend's own
+ * `blankToUndefined` treats a missing key and an empty string alike — sending explicit
+ * nulls would make the client assert an absence in a shape the schema never promised to
+ * read.
+ *
+ * There is no `title` or `price` here on purpose. The backend resolves the product from
+ * [productId] alone, so a caller cannot submit a real product with an invented price and
+ * have it emailed to sales as fact.
+ */
+@Serializable
+data class EnquiryRequestDto(
+    val productId: Int,
+    val seenPrice: Double? = null,
+    val contact: ContactDto,
+    val message: String? = null,
+)
+
+@Serializable
+data class ContactDto(
+    val name: String,
+    val email: String,
+    val phone: String? = null,
+)
+
+/**
+ * The 2xx body (SPEC.md §4.6).
+ *
+ * One field, and no reference id: nothing is persisted server-side, so an id the customer
+ * could not look up would be theatre. [acceptedAt] carries no default — a success with no
+ * timestamp is a malformed response, not an unstamped one.
+ */
+@Serializable
+data class EnquiryAcceptedDto(val acceptedAt: String)

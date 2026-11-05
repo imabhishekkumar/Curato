@@ -30,6 +30,11 @@ data class PanelAction(
  * simply get no Retry. SPEC.md §7.6 is explicit that offering Retry where retrying
  * cannot help is worse than offering nothing: a product that no longer exists will not
  * start existing because the customer tapped again.
+ *
+ * The mark above the title comes in two forms. [glyph] is an emoji, which is what most
+ * states here use; [glyphContent] is a slot for a drawn vector, for the states the kit
+ * gives a real sprite entry. [glyphContent] wins where both are supplied, because a drawn
+ * glyph is the more specific instruction.
  */
 @Composable
 fun StatePanel(
@@ -37,6 +42,7 @@ fun StatePanel(
     body: String,
     modifier: Modifier = Modifier,
     glyph: String? = null,
+    glyphContent: (@Composable () -> Unit)? = null,
     actions: List<PanelAction> = emptyList(),
 ) {
     Column(
@@ -47,7 +53,9 @@ fun StatePanel(
         // error inside a list — the column wraps its content and the alignment is moot.
         verticalArrangement = Arrangement.spacedBy(Spacing.x2, Alignment.CenterVertically),
     ) {
-        if (glyph != null) {
+        if (glyphContent != null) {
+            glyphContent()
+        } else if (glyph != null) {
             Text(
                 text = glyph,
                 style = MaterialTheme.typography.displaySmall,

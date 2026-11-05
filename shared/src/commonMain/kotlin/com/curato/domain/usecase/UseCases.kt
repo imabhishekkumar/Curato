@@ -3,12 +3,17 @@ package com.curato.domain.usecase
 import com.curato.domain.ApiResult
 import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryShelf
+import com.curato.domain.model.Contact
+import com.curato.domain.model.Enquiry
+import com.curato.domain.model.EnquiryAccepted
 import com.curato.domain.model.FeaturedShelf
 import com.curato.domain.model.Product
 import com.curato.domain.model.RecentProduct
 import com.curato.domain.model.SearchResults
 import com.curato.domain.repository.CatalogueRepository
+import com.curato.domain.repository.EnquiryRepository
 import com.curato.domain.repository.RecentlyViewedRepository
+import com.curato.domain.repository.SavedContactRepository
 import kotlinx.coroutines.flow.Flow
 
 /**
@@ -75,4 +80,29 @@ class ObserveRecentlyViewed(private val repository: RecentlyViewedRepository) {
 
 class RecordProductViewed(private val repository: RecentlyViewedRepository) {
     suspend operator fun invoke(product: RecentProduct) = repository.record(product)
+}
+
+/**
+ * Submit an enquiry (SPEC.md §4.6).
+ *
+ * The app's only write. Named for the verb the screen performs rather than the endpoint
+ * it reaches, like the rest of these.
+ */
+class SubmitEnquiry(private val repository: EnquiryRepository) {
+    suspend operator fun invoke(enquiry: Enquiry): ApiResult<EnquiryAccepted> =
+        repository.submit(enquiry)
+}
+
+/** Emits `null` when nothing is saved, which is the first-enquiry case (SPEC.md §9.2). */
+class ObserveSavedContact(private val repository: SavedContactRepository) {
+    operator fun invoke(): Flow<Contact?> = repository.observe()
+}
+
+/** Only ever called with consent checked — the gate is the ViewModel's (AC-17). */
+class SaveContact(private val repository: SavedContactRepository) {
+    suspend operator fun invoke(contact: Contact) = repository.save(contact)
+}
+
+class ClearSavedContact(private val repository: SavedContactRepository) {
+    suspend operator fun invoke() = repository.clear()
 }

@@ -3,6 +3,8 @@ package com.curato.data.remote
 import com.curato.data.remote.dto.ApiErrorDto
 import com.curato.data.remote.dto.CategoriesDto
 import com.curato.data.remote.dto.CategoryProductsDto
+import com.curato.data.remote.dto.EnquiryAcceptedDto
+import com.curato.data.remote.dto.EnquiryRequestDto
 import com.curato.data.remote.dto.EnvelopeDto
 import com.curato.data.remote.dto.HomeDto
 import com.curato.data.remote.dto.ProductDto
@@ -15,6 +17,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.appendPathSegments
 import kotlinx.coroutines.CancellationException
@@ -80,6 +84,27 @@ class CuratoApi(
                     appendPathSegments("products", "search")
                     parameters.append("q", query)
                 }
+            }
+        }
+
+    /**
+     * Submit an enquiry (SPEC.md §4.6) — the only call that is not a read.
+     *
+     * `Content-Type: application/json` is already on `defaultRequest`, which the backend
+     * requires rather than infers: it rejects any other type as `MALFORMED_REQUEST` before
+     * validation, so that a `text/plain` POST comes back as "that request could not be
+     * read" instead of a field error for a body nothing ever parsed.
+     *
+     * **Non-idempotent, and deliberately not retried here.** A timeout on this call may
+     * mean the mail was never sent, or that it was sent and the response was lost; a
+     * transport-level retry would turn the second case into two emails to sales. Retry is
+     * the customer's decision, on the screen, with their values still in front of them.
+     */
+    suspend fun submitEnquiry(enquiry: EnquiryRequestDto): ApiResult<EnquiryAcceptedDto> =
+        request {
+            client.post(baseUrl) {
+                url { appendPathSegments("enquiries") }
+                setBody(enquiry)
             }
         }
 

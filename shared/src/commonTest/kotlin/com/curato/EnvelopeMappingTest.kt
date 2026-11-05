@@ -4,12 +4,22 @@ import com.curato.data.remote.CuratoApi
 import com.curato.domain.ApiResult
 import com.curato.domain.ErrorCode
 import com.curato.domain.usecase.MIN_QUERY_MESSAGE
+import com.curato.domain.model.Contact
+import com.curato.domain.model.Enquiry
+import com.curato.data.mapper.toDto
+import com.curato.domain.validation.EMAIL_MESSAGE
+import com.curato.domain.validation.FIELD_EMAIL
+import com.curato.domain.validation.FIELD_PHONE
+import com.curato.domain.validation.PHONE_MESSAGE
+import com.curato.domain.validation.VALIDATION_BANNER_MESSAGE
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.headersOf
 import io.ktor.http.HttpHeaders
 import io.ktor.http.ContentType
+import io.ktor.http.content.TextContent
+import io.ktor.http.HttpMethod
 import com.curato.data.remote.createHttpClient
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -30,6 +40,19 @@ class EnvelopeMappingTest {
             respond(
                 content = body,
                 status = status,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+            )
+        }
+        return CuratoApi(createHttpClient(engine), "http://test.local")
+    }
+
+    /** The same, but handing back the request body the API actually sent. */
+    private fun apiRecordingBody(body: String, recorded: MutableList<String>): CuratoApi {
+        val engine = MockEngine { request ->
+            recorded += (request.body as TextContent).text
+            respond(
+                content = body,
+                status = HttpStatusCode.OK,
                 headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
             )
         }
@@ -289,6 +312,181 @@ class EnvelopeMappingTest {
         assertTrue(url.contains("q=winter"), url)
         // The `&` is escaped rather than starting a second parameter.
         assertFalse(url.substringAfter("?").contains("&"), url)
+    }
+
+    // ── POST /enquiries (SPEC.md §4.6) ──
+
+    private val accepted =
+        """{"success":true,"error":null,"data":{"acceptedAt":"2026-11-05T10:15:30.000Z"}}"""
+
+    @Test
+    fun a_2xx_decodes_the_accepted_timestamp() = runTest {
+        val api = apiReturning(accepted)
+        val result = api.submitEnquiry(
+            Enquiry(1, 55.99, Contact("Ada", "ada@example.com")).toDto(),
+        )
+        assertTrue(result is ApiResult.Ok)
+        assertEquals("2026-11-05T10:15:30.000Z", result.value.acceptedAt)
+    }
+
+    @Test
+    fun the_enquiry_goes_to_enquiries_as_a_post() = runTest {
+        val methods = mutableListOf<HttpMethod>()
+        val engine = MockEngine { request ->
+            methods += request.method
+            respond(
+                content = accepted,
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType, ContentType.Application.Json.toString()),
+            )
+        }
+        val api = CuratoApi(createHttpClient(engine), "http://test.local")
+        api.submitEnquiry(Enquiry(1, null, Contact("Ada", "ada@example.com")).toDto())
+        assertEquals(HttpMethod.Post, methods.single())
+    }
+
+    /**
+     * §3's body, exactly — and the shape of the *absences* as much as the values.
+     *
+     * The backend treats a missing key and an empty string differently in one place that
+     * matters: `seenPrice` is "ignored when absent or implausible, never rejected". Sending
+     * `"seenPrice": null` would be asserting an absence in a shape the schema never
+     * promised to read, so the client's `explicitNulls = false` has to actually be doing
+     * its job here.
+     */
+    @Test
+    fun absent_optionals_are_omitted_from_the_body_rather_than_sent_as_null() = runTest {
+        val bodies = mutableListOf<String>()
+        val api = apiRecordingBody(accepted, bodies)
+
+        api.submitEnquiry(
+            Enquiry(
+                productId = 1,
+                seenPrice = null,
+                contact = Contact("Ada Lovelace", "ada@example.com", phone = null),
+                message = null,
+            ).toDto(),
+        )
+
+        val body = bodies.single()
+        assertFalse(body.contains("seenPrice"), body)
+        assertFalse(body.contains("phone"), body)
+        assertFalse(body.contains("message"), body)
+        assertFalse(body.contains("null"), body)
+        // And the required half is present and unmangled.
+        assertTrue(body.contains(""""productId":1"""), body)
+        assertTrue(body.contains(""""email":"ada@example.com""""), body)
+    }
+
+    @Test
+    fun a_full_body_carries_every_field_at_its_specified_name() = runTest {
+        val bodies = mutableListOf<String>()
+        val api = apiRecordingBody(accepted, bodies)
+
+        api.submitEnquiry(
+            Enquiry(
+                productId = 1,
+                seenPrice = 109.95,
+                contact = Contact("Ada Lovelace", "ada@example.com", "+91 9876543210"),
+                message = "Is this available in black?",
+            ).toDto(),
+        )
+
+        val body = bodies.single()
+        // No client-supplied title or price: the backend resolves the product itself, and
+        // a body carrying either would be the bug §3 describes.
+        assertFalse(body.contains("title"), body)
+        assertFalse(body.contains(""""price""""), body)
+        assertTrue(body.contains(""""seenPrice":109.95"""), body)
+        assertTrue(body.contains(""""phone":"+91 9876543210""""), body)
+        assertTrue(body.contains(""""message":"Is this available in black?""""), body)
+    }
+
+    /**
+     * The client's own validation strings are the server's, not near-copies.
+     *
+     * The mirror exists so a customer is told immediately; the two telling them different
+     * things about the same field would be worse than only the server telling them. If the
+     * backend reworded a message, this fixture and the constant would stop matching.
+     */
+    @Test
+    fun a_422_carries_the_exact_messages_the_client_mirrors() = runTest {
+        val api = apiReturning(
+            """{"success":false,"data":null,"error":{"code":"VALIDATION_FAILED","userMessage":"Please check the highlighted fields.","developerMessage":"enquiry failed validation: contact.email, contact.phone","traceId":"01JBQ7F3K2","fieldErrors":{"contact.email":"Enter a valid email address","contact.phone":"Enter a valid phone number"}}}""",
+            HttpStatusCode.UnprocessableEntity,
+        )
+        val result = api.submitEnquiry(Enquiry(1, null, Contact("Ada", "bad")).toDto())
+
+        assertTrue(result is ApiResult.Fail)
+        assertEquals(ErrorCode.VALIDATION_FAILED, result.error.code)
+        assertEquals(VALIDATION_BANNER_MESSAGE, result.error.userMessage)
+        assertEquals(EMAIL_MESSAGE, result.error.fieldErrors[FIELD_EMAIL])
+        assertEquals(PHONE_MESSAGE, result.error.fieldErrors[FIELD_PHONE])
+        // Never retryable, and never carrying a trace: §5 restricts that to 500s.
+        assertFalse(result.error.isRetryable)
+        assertEquals(null, result.error.traceId)
+    }
+
+    /**
+     * §6's "validation is not resolution".
+     *
+     * A well-formed id that does not resolve is a 404 with **no** `fieldErrors` — there is
+     * no input to annotate, which is what forces the client onto §7.6's non-retryable path
+     * rather than offering "fix this field" for a product that has been removed.
+     */
+    @Test
+    fun an_unresolvable_product_is_NOT_FOUND_with_no_field_errors() = runTest {
+        val api = apiReturning(
+            """{"success":false,"data":null,"error":{"code":"NOT_FOUND","userMessage":"We could not find what you were looking for.","developerMessage":"enquiry references a product that does not resolve","traceId":"01JBQ7F3K3"}}""",
+            HttpStatusCode.NotFound,
+        )
+        val result = api.submitEnquiry(Enquiry(9999, null, Contact("Ada", "a@b.co")).toDto())
+
+        assertTrue(result is ApiResult.Fail)
+        assertEquals(ErrorCode.NOT_FOUND, result.error.code)
+        assertTrue(result.error.fieldErrors.isEmpty())
+        assertFalse(result.error.isRetryable)
+    }
+
+    @Test
+    fun a_send_failure_is_retryable_and_carries_no_trace() = runTest {
+        val api = apiReturning(
+            """{"success":false,"data":null,"error":{"code":"EMAIL_SEND_FAILED","userMessage":"We could not send your enquiry. Please try again.","developerMessage":"smtp rejected the message","traceId":"01JBQ7F3K4"}}""",
+            HttpStatusCode.BadGateway,
+        )
+        val result = api.submitEnquiry(Enquiry(1, null, Contact("Ada", "a@b.co")).toDto())
+
+        assertTrue(result is ApiResult.Fail)
+        assertEquals(ErrorCode.EMAIL_SEND_FAILED, result.error.code)
+        assertTrue(result.error.isRetryable)
+        assertEquals(null, result.error.traceId)
+    }
+
+    /** The one code that keeps its trace, because it is the one the client shows. */
+    @Test
+    fun an_internal_error_keeps_its_trace_id() = runTest {
+        val api = apiReturning(
+            """{"success":false,"data":null,"error":{"code":"INTERNAL_ERROR","userMessage":"Something went wrong on our end.","developerMessage":"unhandled","traceId":"01JBQ7F3K2"}}""",
+            HttpStatusCode.InternalServerError,
+        )
+        val result = api.submitEnquiry(Enquiry(1, null, Contact("Ada", "a@b.co")).toDto())
+
+        assertTrue(result is ApiResult.Fail)
+        assertEquals("01JBQ7F3K2", result.error.traceId)
+    }
+
+    @Test
+    fun rate_limiting_is_retryable_and_keeps_no_trace() = runTest {
+        val api = apiReturning(
+            """{"success":false,"data":null,"error":{"code":"RATE_LIMITED","userMessage":"Too many enquiries from this device. Please try again shortly.","developerMessage":"per-IP enquiry rate limit exceeded","traceId":"01JBQ7F3K5"}}""",
+            HttpStatusCode.TooManyRequests,
+        )
+        val result = api.submitEnquiry(Enquiry(1, null, Contact("Ada", "a@b.co")).toDto())
+
+        assertTrue(result is ApiResult.Fail)
+        assertEquals(ErrorCode.RATE_LIMITED, result.error.code)
+        assertTrue(result.error.isRetryable)
+        assertEquals(null, result.error.traceId)
     }
 
     @Test

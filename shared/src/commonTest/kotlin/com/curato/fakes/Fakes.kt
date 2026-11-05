@@ -6,6 +6,9 @@ import com.curato.domain.ErrorCode
 import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryRef
 import com.curato.domain.model.CategoryShelf
+import com.curato.domain.model.Contact
+import com.curato.domain.model.Enquiry
+import com.curato.domain.model.EnquiryAccepted
 import com.curato.domain.model.FeaturedShelf
 import com.curato.domain.model.FeaturedSource
 import com.curato.domain.model.Product
@@ -14,7 +17,9 @@ import com.curato.domain.model.Rating
 import com.curato.domain.model.RecentProduct
 import com.curato.domain.model.SearchResults
 import com.curato.domain.repository.CatalogueRepository
+import com.curato.domain.repository.EnquiryRepository
 import com.curato.domain.repository.RecentlyViewedRepository
+import com.curato.domain.repository.SavedContactRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,4 +162,78 @@ class FakeRecentlyViewedRepository(
         state.value = listOf(product) + state.value.filterNot { it.id == product.id }
     }
     override suspend fun clear() { state.value = emptyList() }
+}
+
+fun contact(
+    name: String = "Ada Lovelace",
+    email: String = "ada@example.com",
+    phone: String? = "+91 9876543210",
+) = Contact(name = name, email = email, phone = phone)
+
+/** A `DomainError` carrying field errors, for the 422 path. */
+fun fieldError(vararg entries: Pair<String, String>) = DomainError(
+    code = ErrorCode.VALIDATION_FAILED,
+    userMessage = "Please check the highlighted fields.",
+    fieldErrors = entries.toMap(),
+)
+
+/**
+ * The enquiry endpoint, recording what it was asked to send.
+ *
+ * [enquiries] is a list rather than a `lastEnquiry` for the reason the search fake keeps
+ * one: AC-18's claim is about **how many** submissions a double tap produces, and a
+ * single-value field cannot tell one from two.
+ */
+class FakeEnquiryRepository : EnquiryRepository {
+    var result: ApiResult<EnquiryAccepted> = ApiResult.Ok(EnquiryAccepted(AcceptedAtFixture))
+
+    val enquiries = mutableListOf<Enquiry>()
+    val calls: Int get() = enquiries.size
+
+    /**
+     * Virtual milliseconds a submission takes.
+     *
+     * Zero by default. Set it to put the call genuinely in flight: with an instant fake
+     * there is no moment at which `submitting` is the state, so the disabled button and
+     * the non-re-entrancy guard could not be observed at all.
+     */
+    var latencyMillis: Long = 0
+
+    override suspend fun submit(enquiry: Enquiry): ApiResult<EnquiryAccepted> {
+        enquiries += enquiry
+        if (latencyMillis > 0) delay(latencyMillis)
+        return result
+    }
+}
+
+/** A fixed instant, so `acceptedAt` is an assertion rather than something tolerated. */
+const val AcceptedAtFixture = "2026-11-05T10:15:30.000Z"
+
+/**
+ * The saved-contact store, in memory.
+ *
+ * A `MutableStateFlow` rather than a plain field, because the real store is observed and
+ * the screen's collapse-on-clear behaviour depends on the emission, not on the write.
+ */
+class FakeSavedContactRepository(initial: Contact? = null) : SavedContactRepository {
+    private val state = MutableStateFlow(initial)
+
+    var saves = 0
+        private set
+    var clears = 0
+        private set
+
+    val saved: Contact? get() = state.value
+
+    override fun observe(): Flow<Contact?> = state
+
+    override suspend fun save(contact: Contact) {
+        saves++
+        state.value = contact
+    }
+
+    override suspend fun clear() {
+        clears++
+        state.value = null
+    }
 }
