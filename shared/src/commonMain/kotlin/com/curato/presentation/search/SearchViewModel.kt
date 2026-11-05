@@ -31,9 +31,9 @@ private const val KEY_QUERY = "q"
  * Search (SPEC.md §7.4).
  *
  * Results arrive as the term is typed, [SearchDebounceMillis] after the field stops
- * changing. There is no submit: the screen's only input is the field, and the minimum
- * length is enforced by declining to send rather than by greying out a button nobody has
- * to press.
+ * changing, and at once when the customer presses Search — the button beside the field
+ * or the keyboard's action key, both of which call [submit]. The minimum length is
+ * enforced by declining to send; the button is also disabled below it.
  *
  * **The query lives in [handle], and that is a departure from the other two screens.**
  * Category takes its slug and Product its id as plain constructor arguments, with a
@@ -61,6 +61,16 @@ class SearchViewModel(
 
     private var searchJob: Job? = null
 
+    /** The term [searchJob] is for, while that job is pending or in flight. */
+    private var jobTerm: String? = null
+
+    /** Whether [searchJob] is still sitting out the debounce, rather than in flight. */
+    private var jobDebouncing = false
+
+    /** The term whose results are on screen, as the server echoed it. */
+    private val displayedTerm: String?
+        get() = (_state.value as? SearchUiState.Results)?.results?.query
+
     init {
         // A restored or route-seeded term is already settled, so it is not debounced:
         // nobody is mid-keystroke, and 300ms of "Keep typing" in front of a search that
@@ -75,18 +85,38 @@ class SearchViewModel(
         val term = value.trim()
 
         // "bag" → "bag " is the same search. The server trims, so re-firing would spend a
-        // request redrawing an identical grid for a keystroke that changed nothing.
-        val alreadyShowing = (_state.value as? SearchUiState.Results)?.results?.query
-        if (term == alreadyShowing) {
+        // request redrawing an identical grid, or restart one already on its way.
+        if (term == jobTerm && searchJob?.isActive == true) return
+
+        if (term == displayedTerm) {
             // Back to what is already on screen: "bag" → "jacket" → "bag" inside the
             // debounce. Nothing new needs sending, but the "jacket" search queued on the
             // way here does need abandoning — left alone, it fires and replaces the bag
             // results under a field that says "bag".
-            searchJob?.cancel()
+            cancelPending()
             return
         }
 
         search(term, debounced = true)
+    }
+
+    /**
+     * The Search button and the keyboard's action key: run the term in the field now.
+     *
+     * Skips the debounce and cancels any search still waiting it out, so a press is one
+     * request rather than one now and a duplicate 300ms later. A search already in flight
+     * for this term, or results already showing for it, are left alone — pressing Search
+     * on an answered question asks it twice. Below the minimum nothing is sent, the same
+     * as typing.
+     */
+    fun submit() {
+        val term = query.value.trim()
+        if (term == jobTerm && searchJob?.isActive == true && !jobDebouncing) return
+        if (term == displayedTerm) {
+            cancelPending()
+            return
+        }
+        search(term, debounced = false)
     }
 
     /**
@@ -98,19 +128,29 @@ class SearchViewModel(
      */
     fun retry() = search(query.value.trim(), debounced = false)
 
+    private fun cancelPending() {
+        searchJob?.cancel()
+        searchJob = null
+        jobTerm = null
+        jobDebouncing = false
+    }
+
     private fun search(term: String, debounced: Boolean) {
         // Always cancelled first, including on the way to [SearchUiState.BelowMinimum]:
         // deleting back down to one character has to abandon the search already in flight,
         // or its results would land on top of a screen that has stopped asking for them.
-        searchJob?.cancel()
+        cancelPending()
 
         if (term.length < MIN_QUERY_LENGTH) {
             _state.value = SearchUiState.BelowMinimum()
             return
         }
 
+        jobTerm = term
+        jobDebouncing = debounced
         searchJob = viewModelScope.launch {
             if (debounced) delay(SearchDebounceMillis)
+            jobDebouncing = false
 
             // Replaces whatever was on screen rather than leaving the old grid up. The
             // count row names the term it searched, so a populated grid sitting under a

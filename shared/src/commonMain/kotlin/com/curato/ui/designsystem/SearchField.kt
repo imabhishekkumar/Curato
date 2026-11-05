@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -57,13 +58,15 @@ private val MagnifierSize: Dp = 20.dp
  * the more specific of the two, so it wins; the labelled variant belongs to Enquiry, where
  * it is the thing the kit draws.
  *
- * [onQueryChange] fires per keystroke. Whether that becomes a request is the caller's
- * business — this component never debounces and never decides a term is too short.
+ * [onQueryChange] fires per keystroke and [onSearch] on the keyboard's Search key.
+ * Whether either becomes a request is the caller's business — this component never
+ * debounces and never decides a term is too short.
  */
 @Composable
 fun SearchField(
     query: String,
     onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "Search products",
     label: String = "Search products",
@@ -120,9 +123,14 @@ fun SearchField(
                     autoCorrectEnabled = false,
                     capitalization = KeyboardCapitalization.None,
                 ),
-                // There is nothing to submit — results arrive as the term is typed — so
-                // the action key reveals them instead of being inert.
-                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+                // The same action as [SearchSubmitButton]: search now, and get the
+                // keyboard out of the way of the results it is about to show.
+                keyboardActions = KeyboardActions(
+                    onSearch = {
+                        onSearch()
+                        keyboard?.hide()
+                    },
+                ),
                 singleLine = true,
                 cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             ) { field ->
@@ -141,6 +149,33 @@ fun SearchField(
     }
 
     FocusOnEmpty(query = query, focusRequester = focusRequester)
+}
+
+/**
+ * The visible Search action beside [SearchField].
+ *
+ * Results also arrive as the term is typed, but a customer who expects to press Search
+ * should find a button to press, and a screen reader user needs a named control rather
+ * than a timer. Disabled below the minimum length (SPEC.md §7.4), so it never offers a
+ * search that would not be sent. 48dp in both directions, per the kit's touch floor.
+ */
+@Composable
+fun SearchSubmitButton(
+    onClick: () -> Unit,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    TextButton(
+        onClick = {
+            onClick()
+            keyboard?.hide()
+        },
+        enabled = enabled,
+        modifier = modifier.defaultMinSize(minWidth = MinTouchTarget, minHeight = MinTouchTarget),
+    ) {
+        Text(text = "Search", style = MaterialTheme.typography.labelLarge)
+    }
 }
 
 /**

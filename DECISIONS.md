@@ -246,21 +246,33 @@ It is also deliberately a `String` in the route rather than `NavType.FloatType`.
 are `Double`, and rounding one through a float to save four bytes is how 109.95 becomes
 109.94999 in an email to sales. Absent, blank and unparseable all collapse to null.
 
-## Search as you type, with a debounce
+## Search: a Search button, plus results as you type
 
-Results arrive 300ms after the field stops changing, with no submit control. SPEC §7.4
-says only that "submission is disabled below 2 characters" and never mentions debounce
-either way, so this is a choice rather than a reading.
+The challenge's acceptance criterion is explicit: the customer enters a term **and clicks
+the search button**. So there is one — a visible, labelled **Search** button beside the
+field — and the keyboard's search key does the same thing. Both run the current term
+immediately. Below SPEC §7.4's two-character minimum the button is disabled and neither
+path sends anything.
+
+Results *also* arrive 300ms after the field stops changing. That is kept because a
+20-product catalogue answers in milliseconds and making someone press a key to see that
+is friction with nothing behind it; the button exists so that the criterion as written
+holds and so a customer — or a screen reader user — who expects a control finds one. A
+debounce-only screen, with the keyboard key merely hiding the keyboard, was the earlier
+shape and was rejected for reading the criterion too loosely.
 
 The 300ms is the Screen Kit's own `emphasized` duration rather than a new number. It is
 what turns typing `backpack` into one request instead of eight — measured through a
 proxy on a device, not assumed — while a deliberate pause mid-word still produces two,
 which is the behaviour a customer correcting a term actually wants.
 
+**The two paths must never add up to two requests.** Pressing Search cancels a search
+still waiting out the debounce and runs it now, so a press is one request rather than
+one now and a duplicate 300ms later. A press while that term is already in flight, or
+while its results are already showing, sends nothing.
+
 **The debounce applies to typing, and only to typing.** A query restored after process
-death, and a Retry after a failure, both fire immediately: neither is mid-keystroke, and
-making a restored screen wait 300ms behind a "Keep typing" panel it is certain to replace
-is a flicker for nothing.
+death, a Retry, and a press of Search all fire immediately.
 
 **A search is abandoned whenever the field stops asking for it.** Shortening a term below
 two characters cancels the search in flight. So does returning the field to the term
@@ -270,11 +282,6 @@ draw jacket results under a field reading "bag". A whitespace-only edit (`"bag"`
 `"bag "`) is the same search and is not re-sent. As a last guard, a cancelled search
 checks it is still active before writing its result, so a repository that returns after
 cancellation still cannot replace the current answer.
-
-The alternative — an explicit submit key — would have read §7.4 more literally and kept
-timing out of the tests. It was rejected because a 20-product catalogue answers in
-milliseconds, and making someone press a key to see that is friction with nothing behind
-it.
 
 ## A `SavedStateHandle`, for the two screens that need one
 

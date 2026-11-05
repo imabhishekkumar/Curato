@@ -517,4 +517,96 @@ class SearchViewModelTest {
         assertEquals("bag", results.query)
         assertEquals(listOf(1), results.products.map { it.id })
     }
+
+    // ---- the Search button and keyboard action ------------------------------------
+
+    @Test
+    fun submit_searches_at_once_without_waiting_for_the_debounce() = runTest(dispatcher) {
+        val catalogue = FakeCatalogueRepository()
+        val vm = viewModel(catalogue = catalogue)
+
+        vm.onQueryChange("bag")
+        vm.submit()
+        testScheduler.advanceTimeBy(1)
+
+        assertEquals(listOf("bag"), catalogue.searchQueries)
+        assertIs<SearchUiState.Results>(vm.state.value)
+    }
+
+    /** The press replaces the queued search; it does not run beside it. */
+    @Test
+    fun submit_cancels_the_debounced_search_so_only_one_request_is_made() =
+        runTest(dispatcher) {
+            val catalogue = FakeCatalogueRepository()
+            val vm = viewModel(catalogue = catalogue)
+
+            vm.onQueryChange("bag")
+            testScheduler.advanceTimeBy(SearchDebounceMillis - 100)
+            vm.submit()
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf("bag"), catalogue.searchQueries)
+        }
+
+    @Test
+    fun submit_below_the_minimum_sends_nothing() = runTest(dispatcher) {
+        val catalogue = FakeCatalogueRepository()
+        val vm = viewModel(catalogue = catalogue)
+
+        vm.onQueryChange(" b ")
+        vm.submit()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(0, catalogue.searchCalls)
+        assertIs<SearchUiState.BelowMinimum>(vm.state.value)
+    }
+
+    @Test
+    fun submit_while_the_same_term_is_in_flight_does_not_send_it_again() =
+        runTest(dispatcher) {
+            val catalogue = FakeCatalogueRepository().apply { searchLatencyMillis = 100 }
+            val vm = viewModel(catalogue = catalogue)
+
+            vm.onQueryChange("bag")
+            testScheduler.advanceTimeBy(SearchDebounceMillis + 1)
+            vm.submit()
+            vm.submit()
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf("bag"), catalogue.searchQueries)
+            assertIs<SearchUiState.Results>(vm.state.value)
+        }
+
+    @Test
+    fun submit_with_results_already_showing_for_the_term_sends_nothing() =
+        runTest(dispatcher) {
+            val catalogue = FakeCatalogueRepository()
+            val vm = viewModel(catalogue = catalogue)
+
+            vm.onQueryChange("bag")
+            testScheduler.advanceUntilIdle()
+            vm.onQueryChange("bag ")
+            vm.submit()
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf("bag"), catalogue.searchQueries)
+        }
+
+    /** A press after a failure is a fresh attempt, the same as Retry. */
+    @Test
+    fun submit_after_a_failure_searches_again() = runTest(dispatcher) {
+        val catalogue = FakeCatalogueRepository().apply {
+            search = ApiResult.Fail(error(ErrorCode.NETWORK_UNAVAILABLE))
+        }
+        val vm = viewModel(catalogue = catalogue)
+
+        vm.onQueryChange("bag")
+        testScheduler.advanceUntilIdle()
+        catalogue.search = ApiResult.Ok(searchResults())
+        vm.submit()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("bag", "bag"), catalogue.searchQueries)
+        assertIs<SearchUiState.Results>(vm.state.value)
+    }
 }

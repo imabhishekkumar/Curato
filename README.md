@@ -22,7 +22,7 @@ are placeholders.
 | Search | Enquiry | Sent |
 |---|---|---|
 | ![Search](docs/screenshots/06-search.png) | ![Enquiry](docs/screenshots/04-enquiry.png) | ![Enquiry sent](docs/screenshots/05-thankyou.png) |
-| Results as you type, naming the term the server matched. | Labelled fields, validation mirrored from the backend, and consent beside the action it governs. | Shown only after SMTP accepted the message — never before. |
+| Results as you type or on Search, naming the term the server matched. | Labelled fields, validation mirrored from the backend, and consent beside the action it governs. | Shown only after SMTP accepted the message — never before. |
 
 ## Stack, and why
 
@@ -67,7 +67,8 @@ component inventory they are drawn from.
   only (no account, no tracking). Renders without a network call, so it works offline.
 - **Category page** — opened from a shelf's "View all"; shows the top-rated products in
   that category plus the remaining ones.
-- **Search** — results arrive as you type, on their own screen, so going back from a
+- **Search** — type a term and press **Search** (or the keyboard's search key) for
+  results at once; they also arrive as you type, after a short pause. Results open on their own screen, so going back from a
   product returns you to your results rather than a reset home screen. Matching reads the
   product description as well as the title, so the result count names the term it matched
   on — that is why a search for "baseball" returns a t-shirt whose title never says so.
@@ -363,7 +364,9 @@ and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
   refusing a Retry on a slug that will never resolve; Product recording a view only on a
   successful load and never on a failed one, and de-duplicating a re-view to the front;
   the Enquire route carrying — and correctly omitting — the captured price; Search
-  firing exactly one request for a typed word and quoting the term the *server* matched;
+  firing exactly one request for a typed word, the Search button firing immediately
+  without a delayed duplicate, a search abandoned when the field returns to the term
+  already on screen, and quoting the term the *server* matched;
   recently-viewed LRU, cap, de-dupe and corrupt-payload handling; locale-independent
   price formatting. All in `commonMain`, so they run with no device — and they run on **both** the Android host
   and the iOS simulator, so a platform-specific regression fails the suite rather than

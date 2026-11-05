@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import com.curato.domain.DomainError
 import com.curato.domain.model.ProductSummary
 import com.curato.domain.model.SearchResults
+import com.curato.domain.usecase.MIN_QUERY_LENGTH
 import com.curato.presentation.search.SearchUiState
 import com.curato.ui.designsystem.CuratoTopBar
 import com.curato.ui.designsystem.PanelAction
@@ -39,6 +40,7 @@ import com.curato.ui.designsystem.ProductCard
 import com.curato.ui.designsystem.ProductCardAspectRatio
 import com.curato.ui.designsystem.ProductGridColumns
 import com.curato.ui.designsystem.SearchField
+import com.curato.ui.designsystem.SearchSubmitButton
 import com.curato.ui.designsystem.ShimmerBox
 import com.curato.ui.designsystem.ShimmerSection
 import com.curato.ui.designsystem.Spacing
@@ -60,6 +62,7 @@ fun SearchScreen(
     query: String,
     state: SearchUiState,
     onQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
     onProductClick: (Int) -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
@@ -80,8 +83,15 @@ fun SearchScreen(
                 SearchField(
                     query = query,
                     onQueryChange = onQueryChange,
-                    // The kit's `flex: 1` — the field takes whatever the back button left.
+                    onSearch = onSearch,
+                    // The kit's `flex: 1` — the field takes whatever the back button and
+                    // the Search button left.
                     modifier = Modifier.weight(1f).padding(start = Spacing.x1),
+                )
+                SearchSubmitButton(
+                    onClick = onSearch,
+                    enabled = query.trim().length >= MIN_QUERY_LENGTH,
+                    modifier = Modifier.padding(start = Spacing.x1),
                 )
             }
 

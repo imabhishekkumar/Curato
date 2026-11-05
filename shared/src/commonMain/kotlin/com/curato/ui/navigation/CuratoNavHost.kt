@@ -142,6 +142,7 @@ fun CuratoNavHost(
                 query = query,
                 state = state,
                 onQueryChange = viewModel::onQueryChange,
+                onSearch = viewModel::submit,
                 onProductClick = { id -> navController.navigate(Routes.product(id)) },
                 onRetry = viewModel::retry,
                 onBack = { navController.popBackStack() },

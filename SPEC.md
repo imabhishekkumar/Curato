@@ -571,7 +571,16 @@ the two sets are disjoint and together equal the category's full contents.
 
 - Its own destination, not an in-place mutation of Home. Home retains its state, and back
   from a product returns to **these results**.
-- Submission is disabled below 2 characters.
+- **An explicit Search action**: a visible Search button beside the field, and the
+  keyboard's search key, both run the current term at once. Results also arrive
+  automatically 300ms after typing stops (DECISIONS.md, "Search: a Search button, plus
+  results as you type"); pressing Search cancels any search still waiting out that delay, so a
+  press is one request, never one now and a duplicate later.
+- Submission is disabled below 2 characters — the button is disabled, and neither path
+  sends a request.
+- Returning the field to the term whose results are already showing sends nothing and
+  abandons any search queued for an intermediate term, so an obsolete answer never
+  replaces the results for the term in the field.
 - Empty results → an empty state naming the term searched ("No products match 'xyz'"),
   with the query still editable. Not an error state.
 - The query survives process death via `SavedStateHandle`.
@@ -583,6 +592,10 @@ its description also returns it.
 **AC-8b** Non-matching products are absent from the results — the screen never shows the
 full catalogue when a term was entered.
 **AC-8c** Matching is case-insensitive, and the term is trimmed before matching.
+**AC-8d** Pressing Search (button or keyboard) runs the current term immediately and
+issues exactly one request for it; below 2 characters it issues none.
+**AC-8e** Typing away from the displayed term and back to it before the debounce elapses
+leaves the displayed results in place and sends no request for the intermediate term.
 
 ### 7.5 Product — `product/{id}`
 
@@ -926,7 +939,7 @@ not merely the ability to navigate to the screen.
 | Home shows the 5 chosen/top-rated products | §7.2, §4.1 | AC-2, AC-2a, AC-2b, AC-2f, AC-5 |
 | Home browses the whole catalogue by category | §7.2, §4.2 | AC-23, AC-24, AC-25, AC-26, AC-27 |
 | Category page: top rated + additional products | §7.3, §4.3 | AC-6, AC-6a, AC-6b, AC-6c |
-| Search shows only products matching the term | §7.4, §4.4 | AC-7, AC-8, AC-8a, AC-8b, AC-8c |
+| Search shows only products matching the term | §7.4, §4.4 | AC-7, AC-8, AC-8a, AC-8b, AC-8c, AC-8d, AC-8e |
 | Product detail page | §7.5, §4.5 | AC-9, AC-10, AC-11 |
 | Enquiry → sales inbox email + "Thank you" | §7.6, §4.6 | AC-12 … AC-22, AC-28, AC-29 |
 | Swappable product data source | §4, §11.1, AGENTS.md | AC-2a (config-driven selection) |
