@@ -259,3 +259,28 @@ measuring it.
   `Arrangement.spacedBy(space, Alignment.CenterVertically)` — and it let the compensating
   padding come out of Home too. A magic number that exists to offset a missing rule is
   usually pointing at the rule.
+
+- **A registered dependency that nothing had ever called.** `RecordProductViewed` was
+  wired into Koin during the foundation pass and referenced exactly three times — all
+  declarations. No screen invoked it, so the device-local store was never written, so
+  Home's recently-viewed section could not appear, so **two acceptance criteria were
+  quietly untestable** rather than failing. A green build and a green suite both reported
+  success throughout. What surfaced it was asking, before starting the product screen,
+  which use cases had call sites — a question worth asking of any codebase where the DI
+  container is the only thing holding a reference.
+
+- **The verification harness was worth more than the feature code this time.** Three of
+  this screen's states cannot occur on a developer's machine: the backend answers in
+  nine milliseconds, so loading is never seen, and the app only ever navigates with ids
+  the catalogue just returned, so `NOT_FOUND` is unreachable by tapping. A small proxy
+  that either stalls every request or answers `/products/<id>` with the backend's *own*
+  404 envelope made both real. Fetching the canned envelope from the live backend at
+  startup, rather than hand-writing one, is what keeps it a test of the mapping rather
+  than a test of my idea of the mapping.
+
+- **Two small things I wrote and immediately deleted.** A `stateSwap()` helper nothing
+  called, carrying a comment that rationalised its own existence, and a
+  `private val unusedWidthGuard` left behind while trimming an import. Both compiled;
+  both were noise. Recording them because the failure mode is specific — writing a
+  plausible-looking line to satisfy a half-finished thought, then letting a green build
+  stand in for having read it back.

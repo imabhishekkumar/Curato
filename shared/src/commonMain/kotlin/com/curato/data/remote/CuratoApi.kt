@@ -5,6 +5,7 @@ import com.curato.data.remote.dto.CategoriesDto
 import com.curato.data.remote.dto.CategoryProductsDto
 import com.curato.data.remote.dto.EnvelopeDto
 import com.curato.data.remote.dto.HomeDto
+import com.curato.data.remote.dto.ProductDto
 import com.curato.domain.ApiResult
 import com.curato.domain.DomainError
 import com.curato.CuratoLog
@@ -45,6 +46,19 @@ class CuratoApi(
     suspend fun getCategoryProducts(slug: String): ApiResult<CategoryProductsDto> =
         request {
             client.get(baseUrl) { url { appendPathSegments("categories", slug, "products") } }
+        }
+
+    /**
+     * The one endpoint that returns a full product, and the only source of
+     * `description` (SPEC.md §4.5).
+     *
+     * A non-numeric or unknown id is answered `NOT_FOUND` by the backend rather than a
+     * validation failure — resolution is not validation, and there is no field for the
+     * customer to retype.
+     */
+    suspend fun getProduct(id: Int): ApiResult<ProductDto> =
+        request {
+            client.get(baseUrl) { url { appendPathSegments("products", id.toString()) } }
         }
 
     /**

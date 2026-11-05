@@ -15,9 +15,11 @@ import androidx.navigation.navArgument
 import androidx.savedstate.read
 import com.curato.presentation.category.CategoryViewModel
 import com.curato.presentation.home.HomeViewModel
+import com.curato.presentation.product.ProductViewModel
 import com.curato.ui.category.CategoryScreen
 import com.curato.ui.designsystem.StatePanel
 import com.curato.ui.home.HomeScreen
+import com.curato.ui.product.ProductScreen
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -33,11 +35,23 @@ object Routes {
     const val SEARCH = "search?q={q}"
     const val CATEGORY = "category/{slug}"
     const val PRODUCT = "product/{id}"
-    const val ENQUIRE = "product/{id}/enquire"
+    const val ENQUIRE = "product/{id}/enquire?seenPrice={seenPrice}"
 
     fun search(query: String = "") = "search?q=$query"
     fun category(slug: String) = "category/$slug"
     fun product(id: Int) = "product/$id"
+
+    /**
+     * The price the customer was looking at when they tapped Enquire (SPEC.md §7.5).
+     *
+     * It rides the route rather than a shared object, so `product/{id}/enquire` stays
+     * addressable by URL alone — a `Double` is as much a primitive as an id. **Optional
+     * by construction:** a deeplink, or any caller that has no price to offer, simply
+     * omits the parameter, and §6 already tolerates an absent `seenPrice` because it is
+     * a diagnostic rather than an input.
+     */
+    fun enquire(id: Int, seenPrice: Double? = null): String =
+        "product/$id/enquire" + (seenPrice?.let { "?seenPrice=$it" } ?: "")
 }
 
 @Composable
@@ -81,9 +95,26 @@ fun CuratoNavHost(
             )
         }
 
-        // The remaining three routes are declared with their parameter types so Home's
-        // taps navigate for real rather than into nothing. Each is replaced by its
-        // screen in a later pass.
+        composable(
+            route = Routes.PRODUCT,
+            arguments = listOf(navArgument("id") { type = NavType.IntType }),
+        ) { entry ->
+            val id = entry.arguments?.read { getIntOrNull("id") } ?: 0
+            val viewModel: ProductViewModel = koinViewModel { parametersOf(id) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            ProductScreen(
+                state = state,
+                // The price travels with the navigation, captured from what was on
+                // screen at the moment of the tap.
+                onEnquire = { price -> navController.navigate(Routes.enquire(id, price)) },
+                onRetry = viewModel::load,
+                onBack = { navController.popBackStack() },
+            )
+        }
+
+        // The remaining two routes are declared with their parameter types so taps
+        // navigate for real rather than into nothing. Each is replaced by its screen in
+        // a later pass.
         composable(
             route = Routes.SEARCH,
             arguments = listOf(
@@ -94,17 +125,20 @@ fun CuratoNavHost(
         }
 
         composable(
-            route = Routes.PRODUCT,
-            arguments = listOf(navArgument("id") { type = NavType.IntType }),
-        ) { entry ->
-            NotBuiltYet("Product", entry.arguments?.read { getIntOrNull("id") }?.toString())
-        }
-
-        composable(
             route = Routes.ENQUIRE,
-            arguments = listOf(navArgument("id") { type = NavType.IntType }),
+            arguments = listOf(
+                navArgument("id") { type = NavType.IntType },
+                // A String, not a Float: a price is a Double, and rounding 109.95 through
+                // a float to save four bytes on a route is how it becomes 109.94999.
+                // Absent, blank and unparseable all collapse to null below.
+                navArgument("seenPrice") { type = NavType.StringType; defaultValue = "" },
+            ),
         ) { entry ->
-            NotBuiltYet("Enquiry", entry.arguments?.read { getIntOrNull("id") }?.toString())
+            val id = entry.arguments?.read { getIntOrNull("id") }
+            val seenPrice = entry.arguments
+                ?.read { getStringOrNull("seenPrice") }
+                ?.toDoubleOrNull()
+            NotBuiltYet("Enquiry", "product $id, seen price ${seenPrice ?: "not captured"}")
         }
     }
 }

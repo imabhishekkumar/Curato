@@ -46,21 +46,27 @@ private val BackGlyphSize: Dp = 22.dp
  * of loaded content, and every state that has not loaded any passes null. An error state
  * passes null too: there is no verified name to show.
  *
- * Always carries the kit's `.elev` treatment — a `surfaceContainer` ground and a hairline
- * `outlineVariant` rule — rather than elevating on scroll. The kit draws it that way on
- * every screen that has a bar, and a divider that appears on scroll is state to plumb
- * through for no gain at this scope.
+ * [elevated] is the kit's `.elev` treatment — a `surfaceContainer` ground and a hairline
+ * `outlineVariant` rule — and it is a per-screen choice rather than a scroll state. The
+ * kit draws it on the screens whose content starts flush against the bar, and drops it
+ * on the product screen, where the hero panel sits directly beneath and a rule would
+ * compete with the panel's own edge.
  */
 @Composable
 fun CuratoTopBar(
     title: String?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    elevated: Boolean = true,
     backContentDescription: String = "Back",
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = if (elevated) {
+            MaterialTheme.colorScheme.surfaceContainer
+        } else {
+            MaterialTheme.colorScheme.surface
+        },
     ) {
         // The inset is padding *inside* the Surface, so its colour runs up under the
         // status bar. Applied outside, the bar would float below a transparent strip.
@@ -102,10 +108,12 @@ fun CuratoTopBar(
         }
     }
 
-    HorizontalDivider(
-        thickness = 1.dp,
-        color = MaterialTheme.colorScheme.outlineVariant,
-    )
+    if (elevated) {
+        HorizontalDivider(
+            thickness = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant,
+        )
+    }
 }
 
 /**

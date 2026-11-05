@@ -214,6 +214,42 @@ rule — that an empty `additional` omits the second section entirely — is a n
 on the content state, so it is a thing a test asserts rather than a condition buried in a
 composable.
 
+## Carrying the seen price to the enquiry
+
+The price a customer was looking at travels as a route query parameter —
+`product/{id}/enquire?seenPrice=55.99` — rather than in a shared object or a handle
+passed between screens.
+
+SPEC §7.5 describes it as captured "into the enquiry draft on navigation", and §10.2 puts
+the draft in a `SavedStateHandle`. The route is the better carrier for the same
+information. A `Double` is as much a primitive as an id, so §8's rule that routes carry
+primitives only still holds, and `product/{id}/enquire` stays addressable by URL alone.
+It is optional by construction: a deeplink, or any caller with no price to offer, omits
+the parameter, and §6 already tolerates an absent `seenPrice` because it is a diagnostic
+rather than an input.
+
+One deliberate divergence: because the route lives in the back stack, the price now
+survives process death instead of being dropped on a cold restore as §7.5 anticipated.
+That is strictly more useful — the drift note appears more often — and it costs nothing,
+because the value was never authoritative. The backend resolves the product itself and
+emails the price *it* holds; `seenPrice` only ever adds "customer saw $X" beside it.
+
+It is also deliberately a `String` in the route rather than `NavType.FloatType`. Prices
+are `Double`, and rounding one through a float to save four bytes is how 109.95 becomes
+109.94999 in an email to sales. Absent, blank and unparseable all collapse to null.
+
+## A clock, injected
+
+`RecentProduct.viewedAt` had never been written: nothing called `record()` until the
+product screen existed, so there was no time source anywhere in `shared/` and no
+`kotlinx-datetime` dependency. `ProductViewModel` takes `now: () -> Long`, defaulting to
+`kotlin.time.Clock.System` from the Kotlin 2.4 standard library.
+
+Injected rather than called inline for the same reason the backend's cache takes a clock:
+a test can then assert the recorded timestamp instead of tolerating whatever the machine
+happened to say. "Recently viewed shows the newest first" is an ordering claim, and
+ordering claims are only testable when time is an input.
+
 ## Design system
 
 Planned: a lightweight design system using Compose Material 3, with centralized theme

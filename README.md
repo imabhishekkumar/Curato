@@ -2,12 +2,12 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: backend complete; client foundation, Home and Category built and running.**
-> Verified on a device: the backend suite passes on Node 22, the stack comes up under
-> docker compose, and the Android app renders Home and Category against it on an
-> emulator with its own 50 shared tests green on two targets. **Not yet built:** the
-> Search, Product and Enquiry screens — their routes exist and navigate, but each shows
-> a placeholder.
+> **Status: backend complete; client foundation, Home, Category and Product built and
+> running.** Verified on a device: the backend suite passes on Node 22, the stack comes
+> up under docker compose, and the Android app browses from Home through a category to a
+> product against it on an emulator, with its own 66 shared tests green on two targets.
+> **Not yet built:** the Search and Enquiry screens — their routes exist and navigate,
+> but each shows a placeholder.
 
 ## Stack, and why
 
@@ -268,9 +268,11 @@ colour, the Inter type scale with tabular figures, the 4dp spacing base, radii, 
 durations and the 48dp touch-target floor.
 
 **Built:** the design system, the network and envelope layer, DI, navigation, the
-device-local recently-viewed store, Home and Category. **Not built:** Search, Product
+device-local recently-viewed store, Home, Category and Product. **Not built:** Search
 and Enquiry — their routes exist and carry the right primitives, but each renders a
-placeholder naming the parameter it resolved.
+placeholder naming the parameters it resolved. Tapping **Enquire** on a product already
+navigates with both the id and the price that was on screen, so the `seenPrice`
+diagnostic is live before the screen that sends it exists.
 
 ## Where to change things
 
@@ -295,7 +297,7 @@ require reading the whole repo first.
 
 ```bash
 cd backend && nvm use && npm ci && npm run typecheck && npm test   # 216 tests
-./gradlew :shared:allTests                                          # 50, on two targets
+./gradlew :shared:allTests                                          # 66, on two targets
 ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64               # proves iOS compiles
 ```
 
@@ -323,9 +325,11 @@ and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
   know; Home's two calls failing independently and a Retry re-running only the one that
   failed; the shelf heading branching on `featured.source`; Category omitting its second
   section when the remainder is empty, keeping the two sets disjoint when it is not, and
-  refusing a Retry on a slug that will never resolve; recently-viewed LRU, cap, de-dupe
-  and corrupt-payload handling; locale-independent price formatting. All in
-  `commonMain`, so they run with no device — and they run on **both** the Android host
+  refusing a Retry on a slug that will never resolve; Product recording a view only on a
+  successful load and never on a failed one, and de-duplicating a re-view to the front;
+  the Enquire route carrying — and correctly omitting — the captured price;
+  recently-viewed LRU, cap, de-dupe and corrupt-payload handling; locale-independent
+  price formatting. All in `commonMain`, so they run with no device — and they run on **both** the Android host
   and the iOS simulator, so a platform-specific regression fails the suite rather than
   a screen. Still to come with their screens: search and enquiry-draft coverage.
 - **One acceptance criterion is unit-only on purpose.** AC-6c's unknown slug cannot be

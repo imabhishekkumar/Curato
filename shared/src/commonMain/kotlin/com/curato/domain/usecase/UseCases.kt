@@ -4,6 +4,7 @@ import com.curato.domain.ApiResult
 import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
+import com.curato.domain.model.Product
 import com.curato.domain.model.RecentProduct
 import com.curato.domain.repository.CatalogueRepository
 import com.curato.domain.repository.RecentlyViewedRepository
@@ -29,6 +30,10 @@ class GetCategoryShelves(private val repository: CatalogueRepository) {
 class GetCategory(private val repository: CatalogueRepository) {
     suspend operator fun invoke(slug: String): ApiResult<CategoryDetail> =
         repository.getCategory(slug)
+}
+
+class GetProduct(private val repository: CatalogueRepository) {
+    suspend operator fun invoke(id: Int): ApiResult<Product> = repository.getProduct(id)
 }
 
 class ObserveRecentlyViewed(private val repository: RecentlyViewedRepository) {

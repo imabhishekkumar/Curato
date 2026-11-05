@@ -9,10 +9,12 @@ import com.curato.domain.repository.RecentlyViewedRepository
 import com.curato.domain.usecase.GetCategory
 import com.curato.domain.usecase.GetCategoryShelves
 import com.curato.domain.usecase.GetFeaturedShelf
+import com.curato.domain.usecase.GetProduct
 import com.curato.domain.usecase.ObserveRecentlyViewed
 import com.curato.domain.usecase.RecordProductViewed
 import com.curato.presentation.category.CategoryViewModel
 import com.curato.presentation.home.HomeViewModel
+import com.curato.presentation.product.ProductViewModel
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -42,6 +44,7 @@ val sharedModule: Module = module {
     factory { GetFeaturedShelf(repository = get()) }
     factory { GetCategoryShelves(repository = get()) }
     factory { GetCategory(repository = get()) }
+    factory { GetProduct(repository = get()) }
     factory { ObserveRecentlyViewed(repository = get()) }
     factory { RecordProductViewed(repository = get()) }
 
@@ -57,6 +60,14 @@ val sharedModule: Module = module {
     // `SavedStateHandle` would buy nothing: the slug already lives in the back-stack
     // entry, and Navigation restores it across process death on its own.
     viewModel { params -> CategoryViewModel(slug = params.get(), getCategory = get()) }
+
+    viewModel { params ->
+        ProductViewModel(
+            id = params.get(),
+            getProduct = get(),
+            recordProductViewed = get(),
+        )
+    }
 }
 
 private inline fun <reified T : Any> org.koin.core.scope.Scope.get(named: String): T =

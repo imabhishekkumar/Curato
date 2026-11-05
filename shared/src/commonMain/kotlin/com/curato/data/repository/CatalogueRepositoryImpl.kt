@@ -7,6 +7,7 @@ import com.curato.domain.map
 import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
+import com.curato.domain.model.Product
 import com.curato.domain.repository.CatalogueRepository
 
 class CatalogueRepositoryImpl(
@@ -21,4 +22,7 @@ class CatalogueRepositoryImpl(
 
     override suspend fun getCategory(slug: String): ApiResult<CategoryDetail> =
         api.getCategoryProducts(slug).map { it.toDomain() }
+
+    override suspend fun getProduct(id: Int): ApiResult<Product> =
+        api.getProduct(id).map { it.toDomain() }
 }

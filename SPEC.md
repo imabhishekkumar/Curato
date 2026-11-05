@@ -591,7 +591,7 @@ full catalogue when a term was entered.
 - Shows image, title, price with currency, category, rating (`rate` and `count`),
   description.
 - **The image is inset on a panel, never full-bleed.** Upstream images top out at 646 px
-  on the long edge (§10.5); a full-width hero at 360dp is 1080 px at xxhdpi and would
+  on the long edge (§10.4); a full-width hero at 360dp is 1080 px at xxhdpi and would
   upscale visibly. Drawn at roughly 240dp, it is close to native.
 - **The displayed price is captured into the enquiry draft on navigation**, and is what
   `seenPrice` carries (§3). It is the price *this customer saw*; re-reading it when the
@@ -932,7 +932,7 @@ not merely the ability to navigate to the screen.
 | Swappable product data source | §4, §11.1, AGENTS.md | AC-2a (config-driven selection) |
 | Swappable email provider | §4.6, §11.1 | AC-12 |
 | Evolving look and feel | §7, §10.1 | AC-10 |
-| Runs locally in under 10 minutes | §10.4, README | — (verified by dry-run) |
+| Runs locally in under 10 minutes | §10.5, README | — (verified by dry-run) |
 | Confidence to change the code | §11 | — (the test suite itself) |
 
 **Scored areas and where each is addressed:** solution design → §3–§5, §8;

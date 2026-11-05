@@ -8,6 +8,7 @@ import com.curato.domain.model.CategoryRef
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
 import com.curato.domain.model.FeaturedSource
+import com.curato.domain.model.Product
 import com.curato.domain.model.ProductSummary
 import com.curato.domain.model.Rating
 import com.curato.domain.model.RecentProduct
@@ -41,6 +42,24 @@ fun detail(
     additional: List<ProductSummary> = emptyList(),
 ) = CategoryDetail(category = category, topRated = topRated, additional = additional)
 
+/** The full product, the only shape carrying a description. */
+fun product(
+    id: Int,
+    rate: Double = 4.0,
+    count: Int = 100,
+    price: Double = 9.99,
+    category: CategoryRef = Electronics,
+) = Product(
+    id = id,
+    title = "Product $id",
+    price = price,
+    currency = "USD",
+    description = "A description of product $id.",
+    category = category,
+    imageUrl = "https://example.test/$id.png",
+    rating = Rating(rate, count),
+)
+
 fun recent(id: Int, viewedAt: Long = id.toLong()) = RecentProduct(
     id = id,
     title = "Product $id",
@@ -63,13 +82,16 @@ class FakeCatalogueRepository : CatalogueRepository {
         ApiResult.Ok(listOf(CategoryShelf(CategoryRef("electronics", "Electronics"), listOf(summary(1)))))
 
     var categoryDetail: ApiResult<CategoryDetail> = ApiResult.Ok(detail())
+    var product: ApiResult<Product> = ApiResult.Ok(product(1))
 
     var featuredCalls = 0
     var categoryCalls = 0
     var categoryDetailCalls = 0
+    var productCalls = 0
 
     /** Recorded so a test can prove the route's slug arrives unmangled. */
     var lastSlug: String? = null
+    var lastProductId: Int? = null
 
     override suspend fun getFeatured(): ApiResult<FeaturedShelf> {
         featuredCalls++
@@ -85,6 +107,12 @@ class FakeCatalogueRepository : CatalogueRepository {
         categoryDetailCalls++
         lastSlug = slug
         return categoryDetail
+    }
+
+    override suspend fun getProduct(id: Int): ApiResult<Product> {
+        productCalls++
+        lastProductId = id
+        return product
     }
 }
 

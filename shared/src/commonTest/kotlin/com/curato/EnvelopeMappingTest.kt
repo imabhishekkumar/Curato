@@ -76,6 +76,43 @@ class EnvelopeMappingTest {
         assertTrue(result.value.additional.isEmpty())
     }
 
+    /**
+     * §4.5's payload, the only one carrying `description`.
+     *
+     * No list endpoint sends that field, so this decode is the single place a missing
+     * key could go unnoticed — every other screen would look identical without it.
+     */
+    @Test
+    fun a_product_payload_decodes_with_its_description() = runTest {
+        val api = apiReturning(
+            """{"success":true,"error":null,"data":{"id":1,"title":"Fjallraven Backpack","price":109.95,"currency":"USD","description":"Your perfect pack for everyday use.","category":{"slug":"mens-clothing","name":"Men's Clothing"},"imageUrl":"https://example.test/1.png","rating":{"rate":3.9,"count":120}}}""",
+        )
+        val result = api.getProduct(1)
+        assertTrue(result is ApiResult.Ok)
+        assertEquals("Your perfect pack for everyday use.", result.value.description)
+        assertEquals(109.95, result.value.price)
+        assertEquals("Men's Clothing", result.value.category.name)
+    }
+
+    /**
+     * A non-numeric id is `NOT_FOUND`, not a validation failure.
+     *
+     * That is the backend's deliberate choice — resolution is not validation, and there
+     * is no field for the customer to retype — so the client must render it as a
+     * terminal "gone" rather than offering a Retry.
+     */
+    @Test
+    fun a_non_numeric_product_id_maps_to_a_terminal_not_found() = runTest {
+        val api = apiReturning(
+            """{"success":false,"data":null,"error":{"code":"NOT_FOUND","userMessage":"We could not find what you were looking for.","developerMessage":"product id is not a positive integer"}}""",
+            HttpStatusCode.NotFound,
+        )
+        val result = api.getProduct(0)
+        assertTrue(result is ApiResult.Fail)
+        assertEquals(ErrorCode.NOT_FOUND, result.error.code)
+        assertFalse(result.error.isRetryable)
+    }
+
     /** AC-6c: an unknown slug is an error envelope, and a non-retryable one. */
     @Test
     fun an_unknown_slug_maps_to_a_terminal_not_found() = runTest {

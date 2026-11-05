@@ -4,6 +4,7 @@ import com.curato.domain.ApiResult
 import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
+import com.curato.domain.model.Product
 
 /**
  * The catalogue, behind an interface.
@@ -25,4 +26,13 @@ interface CatalogueRepository {
      * with nothing in it" would render a convincing blank page instead of an error.
      */
     suspend fun getCategory(slug: String): ApiResult<CategoryDetail>
+
+    /**
+     * One product in full, by id (SPEC.md §4.5).
+     *
+     * The product screen resolves itself through this and never accepts an object from
+     * whatever list opened it, which is what makes every entry point — and a future
+     * deeplink — identical.
+     */
+    suspend fun getProduct(id: Int): ApiResult<Product>
 }
