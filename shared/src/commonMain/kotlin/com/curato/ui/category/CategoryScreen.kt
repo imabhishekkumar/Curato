@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -23,7 +24,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.curato.domain.DomainError
 import com.curato.domain.ErrorCode
@@ -60,8 +60,6 @@ fun CategoryScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val safeInsets = WindowInsets.safeDrawing.asPaddingValues()
-
     Surface(
         modifier = modifier
             .fillMaxSize()
@@ -79,7 +77,7 @@ fun CategoryScreen(
 
             when (state) {
                 is CategoryUiState.Loading ->
-                    CategoryPlaceholder(bottomInset = safeInsets.calculateBottomPadding())
+                    CategoryPlaceholder()
 
                 is CategoryUiState.Failed ->
                     CategoryError(error = state.error, onRetry = onRetry, onBack = onBack)
@@ -88,7 +86,6 @@ fun CategoryScreen(
                     detail = state.detail,
                     showAdditional = state.showAdditional,
                     onProductClick = onProductClick,
-                    bottomInset = safeInsets.calculateBottomPadding(),
                 )
             }
         }
@@ -107,7 +104,6 @@ private fun CategoryGrid(
     detail: CategoryDetail,
     showAdditional: Boolean,
     onProductClick: (Int) -> Unit,
-    bottomInset: Dp,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(ProductGridColumns),
@@ -116,7 +112,10 @@ private fun CategoryGrid(
             start = Spacing.gutter,
             end = Spacing.gutter,
             top = Spacing.x4,
-            bottom = bottomInset + Spacing.x8,
+            // The navigation-bar inset is the trailing spacer below, not this value: a
+            // modifier re-reads it on every layout pass, where a composition-time read
+            // can latch the zero the first frame sees.
+            bottom = Spacing.x8,
         ),
         horizontalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
         verticalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
@@ -142,6 +141,8 @@ private fun CategoryGrid(
                 CategoryCard(product, onProductClick)
             }
         }
+
+        fullWidthItem { Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.safeDrawing)) }
     }
 }
 
@@ -169,7 +170,7 @@ private fun CategoryCard(product: ProductSummary, onProductClick: (Int) -> Unit)
  * so two rows of two is the honest shape of what is arriving.
  */
 @Composable
-private fun CategoryPlaceholder(bottomInset: Dp) {
+private fun CategoryPlaceholder() {
     // One `ShimmerSection` around the whole grid, so every placeholder shares a single
     // clock and they sweep together instead of shimmering out of phase.
     ShimmerSection {
@@ -180,7 +181,7 @@ private fun CategoryPlaceholder(bottomInset: Dp) {
                 start = Spacing.gutter,
                 end = Spacing.gutter,
                 top = Spacing.x4,
-                bottom = bottomInset + Spacing.x8,
+                bottom = Spacing.x8,
             ),
             horizontalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
             verticalArrangement = Arrangement.spacedBy(Spacing.betweenCards),

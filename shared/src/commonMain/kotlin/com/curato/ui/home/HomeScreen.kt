@@ -3,12 +3,14 @@ package com.curato.ui.home
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -62,7 +64,10 @@ fun HomeScreen(
     // navigation bars so the app does not look letterboxed; the content is inset from
     // them, because a price or a tappable card sitting under the system bars is either
     // unreadable or unreachable.
-    val safeInsets = WindowInsets.safeDrawing.asPaddingValues()
+    //
+    // The insets are applied by `windowInsets*` modifiers rather than read into a value
+    // here, which is a correctness choice rather than a stylistic one — see the spacers
+    // in the list below.
 
     Surface(
         modifier = modifier
@@ -89,19 +94,32 @@ fun HomeScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            // Inset as content padding rather than as a margin, so the list still
-            // scrolls *under* the bars while its first and last items clear them.
-            contentPadding = PaddingValues(
-                top = safeInsets.calculateTopPadding() + Spacing.x4,
-                bottom = safeInsets.calculateBottomPadding() + Spacing.x8,
-            ),
+            // The system-bar insets are *not* part of this padding; they are the two
+            // spacers below. Only the design's own spacing lives here.
+            contentPadding = PaddingValues(top = Spacing.x4, bottom = Spacing.x8),
             verticalArrangement = Arrangement.spacedBy(Spacing.betweenSections),
         ) {
             item {
-                SearchBarButton(
-                    onClick = onSearchClick,
-                    modifier = Modifier.padding(horizontal = Spacing.gutter),
-                )
+                // The status-bar inset as a spacer rather than as content padding.
+                //
+                // `windowInsetsTopHeight` resolves during *layout*, so it is re-read on
+                // every pass and cannot hold a stale value. `asPaddingValues()` resolves
+                // during *composition*, and the first composition runs before the window
+                // has dispatched any insets — it reads zero, then updates. If that update
+                // does not reach this subtree, the zero persists for the whole session
+                // and the content sits under the status bar. That was observed here: the
+                // search field drawn across the clock while, in the same process, the
+                // product screen's app bar — which uses a modifier — was correct.
+                //
+                // It shares an item with the search field so the arrangement spacing
+                // falls where it always did, leaving the geometry unchanged.
+                Column {
+                    Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
+                    SearchBarButton(
+                        onClick = onSearchClick,
+                        modifier = Modifier.padding(horizontal = Spacing.gutter),
+                    )
+                }
             }
 
             // Hidden entirely on first run — a heading above nothing is a promise the
@@ -124,6 +142,11 @@ fun HomeScreen(
                 onViewAllClick = onViewAllClick,
                 onRetry = onRetryCategories,
             )
+
+            // The navigation-bar inset, for the same reason as the top one. As a trailing
+            // item it still scrolls, so the last card passes under the gesture bar rather
+            // than stopping above it.
+            item { Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.safeDrawing)) }
         }
     }
 }

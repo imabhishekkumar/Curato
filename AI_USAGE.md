@@ -383,3 +383,16 @@ measuring it.
   ceiling — `libagp-version.jar` reports `9.4.0-dev` — turned "try a lower number" into a
   decision with a reason attached, and the two candidate versions were each run through
   the full suite before one was chosen.
+
+- **Two reads of the same value, one of which can go stale.** Home drew its search field
+  across the status bar clock, intermittently, on a build that rendered correctly minutes
+  earlier. What identified it was not a repro but a comparison: navigating from the broken
+  Home to the product screen *without relaunching* showed a correct app bar in the same
+  process. So the window had insets and one screen could not see them. The two differ in
+  how they ask — `Modifier.windowInsetsPadding` resolves during layout and is re-read every
+  pass, while `WindowInsets.asPaddingValues()` resolves during composition, and a logged
+  `top=0.0.dp` then `top=53.0.dp` showed the window in which a missed recomposition leaves
+  the zero in place for the session. The fix removes the mechanism rather than the symptom.
+  It is also the honest limit of this one: roughly twenty launches, a fresh install,
+  rotation and a lock cycle never reproduced it, so the change is reasoned rather than
+  demonstrated, and that is recorded here rather than claimed as a verified fix.

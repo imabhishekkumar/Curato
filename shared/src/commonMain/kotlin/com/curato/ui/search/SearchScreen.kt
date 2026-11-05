@@ -4,9 +4,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -65,11 +66,6 @@ fun SearchScreen(
     onBrowseCategories: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // `systemBars`, deliberately not `safeDrawing`: `safeDrawing` includes the IME, and
-    // the keyboard is handled below by `imePadding()` on the content itself. Counting it
-    // in both places would leave a keyboard's worth of empty scroll under the last row.
-    val bottomInset = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
-
     Surface(
         modifier = modifier
             .fillMaxSize()
@@ -98,7 +94,7 @@ fun SearchScreen(
             Box(modifier = Modifier.weight(1f).imePadding()) {
                 when (state) {
                     is SearchUiState.BelowMinimum -> KeepTyping(state.message)
-                    is SearchUiState.Loading -> SearchPlaceholder(bottomInset)
+                    is SearchUiState.Loading -> SearchPlaceholder()
                     is SearchUiState.Failed -> SearchError(state.error, onRetry, onBack)
                     is SearchUiState.Results -> if (state.showEmptyState) {
                         NoMatches(term = state.results.query, onBrowseCategories = onBrowseCategories)
@@ -106,7 +102,6 @@ fun SearchScreen(
                         ResultsGrid(
                             results = state.results,
                             onProductClick = onProductClick,
-                            bottomInset = bottomInset,
                         )
                     }
                 }
@@ -126,7 +121,6 @@ fun SearchScreen(
 private fun ResultsGrid(
     results: SearchResults,
     onProductClick: (Int) -> Unit,
-    bottomInset: Dp,
 ) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(ProductGridColumns),
@@ -135,7 +129,10 @@ private fun ResultsGrid(
             start = Spacing.gutter,
             end = Spacing.gutter,
             top = Spacing.x3,
-            bottom = bottomInset + Spacing.x8,
+            // The system-bar inset is the trailing spacer below, not this value: a
+            // modifier re-reads it on every layout pass, where a composition-time read
+            // can latch the zero that the first frame sees.
+            bottom = Spacing.x8,
         ),
         horizontalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
         verticalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
@@ -152,6 +149,12 @@ private fun ResultsGrid(
         items(results.products, key = { it.id }) { product ->
             SearchResultCard(product, onProductClick)
         }
+
+        // `systemBars`, deliberately not `safeDrawing`: `safeDrawing` includes the IME,
+        // and the keyboard is handled by `imePadding()` on the content itself. Counting
+        // it in both places would leave a keyboard's worth of empty scroll under the
+        // last row.
+        fullWidthItem { Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.systemBars)) }
     }
 }
 
@@ -232,7 +235,7 @@ private fun KeepTyping(message: String) {
  * one fact a search cannot know in advance.
  */
 @Composable
-private fun SearchPlaceholder(bottomInset: Dp) {
+private fun SearchPlaceholder() {
     // One section, so every placeholder sweeps on a single clock instead of drifting out
     // of phase with the others.
     ShimmerSection {
@@ -244,7 +247,7 @@ private fun SearchPlaceholder(bottomInset: Dp) {
                 start = Spacing.gutter,
                 end = Spacing.gutter,
                 top = Spacing.x3,
-                bottom = bottomInset + Spacing.x8,
+                bottom = Spacing.x8,
             ),
             horizontalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
             verticalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
