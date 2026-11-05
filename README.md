@@ -8,6 +8,22 @@ A small product catalogue: browse, search, and submit an enquiry on a product.
 > catalogue, and sends a real enquiry that lands in the Mailhog inbox — with 182 shared
 > client tests green on two targets. No route renders a placeholder.
 
+## Screens
+
+Captured on a Pixel 10 Pro XL emulator against the local stack — real products from the
+API, and an enquiry that actually reached the Mailhog inbox. The contact details shown
+are placeholders.
+
+| Home | Category | Product |
+|---|---|---|
+| ![Home](docs/screenshots/01-home.png) | ![Category](docs/screenshots/02-category.png) | ![Product](docs/screenshots/03-product.png) |
+| Featured shelf, per-category shelves, and "Recently viewed" — which is hidden entirely until there is something to show. | Top rated first, then the remainder. The second section disappears for a category of five or fewer. | Full detail, with the enquiry action pinned so it never scrolls out of reach. |
+
+| Search | Enquiry | Sent |
+|---|---|---|
+| ![Search](docs/screenshots/06-search.png) | ![Enquiry](docs/screenshots/04-enquiry.png) | ![Enquiry sent](docs/screenshots/05-thankyou.png) |
+| Results as you type, naming the term the server matched. | Labelled fields, validation mirrored from the backend, and consent beside the action it governs. | Shown only after SMTP accepted the message — never before. |
+
 ## Stack, and why
 
 **Backend — Node.js + TypeScript.** A thin typed JSON API in front of the
