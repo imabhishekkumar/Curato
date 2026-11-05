@@ -9,7 +9,12 @@ reviewed. Maintained incrementally alongside [DECISIONS.md](DECISIONS.md) — se
 - Claude Code (Sonnet 5) — wrote the initial agent instruction files and planning docs
   (AGENTS.md, DECISIONS.md, README.md, this file).
 - Claude Code (Opus 5) — user-journey definition onward: planning, the screen kit, the
-  API contract, and the backend implementation and its test suite.
+  API contract, the backend and its test suite, and the Android client.
+- Codex (GPT-6) with its built-in image generation — launcher and splash concepts (see
+  "Android app identity").
+- Claude Code (Opus 5.5) — the pre-submission review against the original challenge: the
+  Search button, the two bug fixes below and their regression tests, the README and doc
+  corrections, and the clean-checkout verification.
 
 Used conversationally throughout, with every change reviewed before being kept.
 
@@ -39,7 +44,7 @@ contradicted.
 
 ## Key prompts / moments that shaped the solution
 
-The seven that changed the shape of the solution, rather than its details.
+The five that changed the shape of the solution, rather than its details.
 
 1. **Backend as the boundary.** Putting `ProductRepository` and `EmailService` behind
    interfaces, in response to the requirement for a foundation that can grow rather than
@@ -59,14 +64,7 @@ The seven that changed the shape of the solution, rather than its details.
    context (sales would have received a contact form with no subject), and "top rated"
    ranking belonged on the backend so the rule can change without a client release.
 
-4. **Collapsing the response envelope to one displayable string.** The first draft
-   carried `message`, `userMessage` and `errorMessage` together, leaving the client with
-   no defined answer to "which do I render?", and omitted both a machine-readable `code`
-   and per-field errors. Reduced to `code` (the only thing the client branches on), one
-   `userMessage`, a sanitized `developerMessage`, `traceId`, and `fieldErrors` keyed by
-   dotted request path.
-
-5. **Auditing the docs against the actual requirements, before writing code.** The
+4. **Auditing the docs against the actual requirements, before writing code.** The
    planning docs had been built from a working understanding rather than a line-by-line
    reading. Re-reading the requirements directly showed that **testing is a scored area
    while our docs had tests under "what I'd do next with another day"**, that security
@@ -75,22 +73,42 @@ The seven that changed the shape of the solution, rather than its details.
    backend for two reasons we had never written down. Corrected while the repo still had
    zero commits.
 
-6. **Designing every screen before writing the backend.** Drawing all six routes and
-   each state they can reach — as a rendered design kit rather than a description —
-   settled questions the contract had left to the implementation, and changed it. Home
-   became a shelf per category rather than a filter, which split `GET /home` and added
-   `GET /categories`; the enquiry screen turned out to need product data its route cannot
-   carry; and list endpoints stopped returning a `description` no card renders. Each of
-   those is cheaper as a drawing than as a migration.
+5. **Reviewing the finished build against the original challenge, not the spec.** The
+   prompt was to compare the implementation with the challenge text itself and prepare
+   it for submission. Three things fell out that every green test had missed: the
+   challenge says the customer **clicks a search button** and the app had none (results
+   arrived only as you typed, and the keyboard key just hid the keyboard); a search for
+   an intermediate term could fire after the field had returned to the term on screen;
+   and a device storage failure after a confirmed send could withhold the thank-you. All
+   three are fixed with tests that fail on the old code. The same pass found two things
+   it could not fix inside its scope, recorded under "Known issues at submission" in
+   DECISIONS.md.
 
-7. **Building the backend against a frozen contract.** The spec was written and agreed
-   before any code existed, so implementation was a matter of honouring it rather than
-   discovering it. That ordering paid off in a specific way: the contract tests were
-   written from SPEC §5 and §11 rather than from the code, so they tested what was
-   promised instead of what was built — and one of them failed, correctly, against a
-   real defect. The three open choices the spec deliberately left (framework, runtime,
-   test runner) were decided explicitly and recorded in DECISIONS.md instead of being
-   settled by whichever import got typed first.
+### Other moments that shaped the details
+
+- **Collapsing the response envelope to one displayable string.** The first draft
+  carried `message`, `userMessage` and `errorMessage` together, leaving the client with
+  no defined answer to "which do I render?", and omitted both a machine-readable `code`
+  and per-field errors. Reduced to `code` (the only thing the client branches on), one
+  `userMessage`, a sanitized `developerMessage`, `traceId`, and `fieldErrors` keyed by
+  dotted request path.
+
+- **Designing every screen before writing the backend.** Drawing all six routes and
+  each state they can reach — as a rendered design kit rather than a description —
+  settled questions the contract had left to the implementation, and changed it. Home
+  became a shelf per category rather than a filter, which split `GET /home` and added
+  `GET /categories`; the enquiry screen turned out to need product data its route cannot
+  carry; and list endpoints stopped returning a `description` no card renders. Each of
+  those is cheaper as a drawing than as a migration.
+
+- **Building the backend against a frozen contract.** The spec was written and agreed
+  before any code existed, so implementation was a matter of honouring it rather than
+  discovering it. That ordering paid off in a specific way: the contract tests were
+  written from SPEC §5 and §11 rather than from the code, so they tested what was
+  promised instead of what was built — and one of them failed, correctly, against a
+  real defect. The three open choices the spec deliberately left (framework, runtime,
+  test runner) were decided explicitly and recorded in DECISIONS.md instead of being
+  settled by whichever import got typed first.
 
 _Also shaped by:_ making AI-usage logging an unprompted agreement in AGENTS.md so this
 log is a by-product of the work rather than a reconstruction; adding a "Start here"
@@ -397,6 +415,14 @@ measuring it.
   rotation and a lock cycle never reproduced it, so the change is reasoned rather than
   demonstrated, and that is recorded here rather than claimed as a verified fix.
 
+- **A search the field had already moved past could still replace its results.** The
+  rule "skip a term equal to the one on screen" returned early without cancelling
+  anything, so `bag` → `jacket` → `bag` inside the 300ms window left the `jacket` search
+  queued, and it fired and drew jacket results under a field reading `bag`. The early
+  return looked like an optimisation and hid a missing cancel. Caught in review, by reading the
+  ViewModel against its own debounce rules — no existing test exercised the sequence; the regression test
+  reproduces that exact sequence and fails on the old code with `[bag, jacket]` sent.
+
 - **A convenience write ran before the fact it depended on.** On a confirmed send the
   enquiry ViewModel saved the contact details *before* recording completion, so a
   throwing store left the screen on a spinning form, kept `submitted` out of the draft,
@@ -405,10 +431,16 @@ measuring it.
   recorded first and the save's failure is contained, with cancellation still rethrown.
   The regression test uses a store whose `save()` throws and fails on the old code.
 
-- **A search the field had already moved past could still replace its results.** The
-  rule "skip a term equal to the one on screen" returned early without cancelling
-  anything, so `bag` → `jacket` → `bag` inside the 300ms window left the `jacket` search
-  queued, and it fired and drew jacket results under a field reading `bag`. The early
-  return looked like an optimisation and hid a missing cancel. Caught in review, by reading the
-  ViewModel against its own debounce rules — no existing test exercised the sequence; the regression test
-  reproduces that exact sequence and fails on the old code with `[bag, jacket]` sent.
+- **"Send failed, form kept, Retry" was true on screen and still sent twice.** Checking
+  the failure path on a device with Mailhog stopped showed the form preserved and Retry
+  offered, as specified — but the app reported a client timeout rather than
+  `EMAIL_SEND_FAILED`, and after Mailhog came back the inbox held two copies. The first
+  request had never failed; it was still waiting inside an SMTP adapter with no timeouts
+  of its own. Only counting the messages in the inbox showed it. Recorded as a known
+  issue rather than fixed in this pass.
+
+- **The live upstream stopped answering servers.** A fresh `docker compose up` reported
+  `upstream: unreachable` while `curl` from the same machine fetched the catalogue:
+  Fake Store's Cloudflare front now challenges Node's `fetch`. Getting past a bot
+  challenge is not something this project does, so the clean-checkout check ran against
+  the recorded fixture through `UPSTREAM_BASE_URL`, and the README states the limitation.

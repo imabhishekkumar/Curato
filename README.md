@@ -2,11 +2,13 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: complete — backend and client, every screen built and running.** Verified on
-> a device: the backend suite passes on Node 22, the stack comes up under docker compose,
-> and the Android app browses from Home through a category to a product, searches the
-> catalogue, and sends a real enquiry that lands in the Mailhog inbox — with 182 shared
-> client tests green on two targets. No route renders a placeholder.
+> **Status: backend and Android client built; every screen implemented.** 216 backend
+> tests and 191 shared client tests pass (the client suite on both the Android host and
+> the iOS simulator). The reviewer journey — Home, a category, search, a product, an
+> enquiry landing in Mailhog — has been run on an Android emulator against a
+> `docker compose` stack. **Known issue:** Fake Store currently answers server-side
+> requests with a Cloudflare bot challenge (`403`), so a live run may show the catalogue
+> as unavailable; see [Upstream availability](#upstream-availability).
 
 ## Screens
 
@@ -107,12 +109,18 @@ brew install colima docker docker-compose
 colima start --cpu 2 --memory 4
 ```
 
-Homebrew's Compose is a CLI plugin, so point Docker at it once — otherwise
-`docker compose` reports "is not a docker command":
+Homebrew's Compose is a CLI plugin. If `docker compose version` reports "is not a
+docker command", Docker needs to be told where the plugin lives — by adding one key to
+`~/.docker/config.json` without disturbing the settings already in it (registry logins,
+the current context):
 
 ```bash
-mkdir -p ~/.docker && printf '{\n  "cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]\n}\n' > ~/.docker/config.json
+mkdir -p ~/.docker
+if [ -f ~/.docker/config.json ]; then plutil -replace cliPluginsExtraDirs -json '["/opt/homebrew/lib/docker/cli-plugins"]' ~/.docker/config.json; else printf '{"cliPluginsExtraDirs":["/opt/homebrew/lib/docker/cli-plugins"]}\n' > ~/.docker/config.json; fi
 ```
+
+`plutil` ships with macOS and edits the JSON in place, keeping every other key. If you
+prefer, add `"cliPluginsExtraDirs": ["/opt/homebrew/lib/docker/cli-plugins"]` by hand.
 
 ### 1. Backend (~2 minutes)
 
@@ -133,9 +141,27 @@ you which, so read it rather than the status code.
 
 Mailhog's web inbox — where enquiry emails land — is at <http://localhost:8025>.
 
-Measured on a clean start — images pulled, both `npm ci` stages run, no build cache —
-**52 seconds from `docker compose up` to a healthy container** on an M-series Mac. The
-10-minute budget in [SPEC.md](SPEC.md) §10.5 has plenty of room.
+Measured on an M-series Mac from a fresh clone of this branch, with
+`docker compose build --no-cache` (both `npm ci` stages run, no layer cache) followed by
+`up`: **30 seconds to a healthy container**. The base images (`node:22-alpine`, Mailhog)
+were already pulled, so a machine that has never pulled them adds their download time —
+Mailhog alone is 572 MB. The 10-minute budget in [SPEC.md](SPEC.md) §10.5 has room for
+both.
+
+### Upstream availability
+
+Fake Store currently puts a Cloudflare bot challenge in front of its API: a browser or
+plain `curl` gets the catalogue, but Node's `fetch` — and so this backend — gets a `403`
+challenge page. When that happens `/health` reports `"upstream": "unreachable"` and every
+catalogue screen shows its retryable "catalogue is unavailable" state. Nothing in this
+repository can fix that from our side without trying to get past the challenge, which it
+deliberately does not do.
+
+The upstream is configuration, not code, so the app can run against the recorded
+20-product catalogue in `backend/test/fixtures/upstream-catalogue.json` served by any
+static server that answers `GET /products` and `GET /products/{id}` the way Fake Store
+does, with `UPSTREAM_BASE_URL` pointed at it. The manual check of the reviewer journey (see
+Testing) was run that way.
 
 `docker compose stop` returns in under a second rather than hitting Docker's 10-second
 kill timeout, because the service handles SIGTERM and finishes in-flight requests first.
@@ -331,13 +357,38 @@ require reading the whole repo first.
 
 ## Testing
 
+From the repository root. Backend first:
+
 ```bash
-cd backend && nvm use && npm ci && npm run typecheck && npm test   # 216 tests
-./gradlew :shared:allTests                                          # 182, on two targets
-./gradlew :shared:linkDebugFrameworkIosSimulatorArm64               # proves iOS compiles
+cd backend && nvm use && npm ci && npm run typecheck && npm run build && npm test && cd ..
 ```
 
-The whole suite runs in under a second with no network, no SMTP and no emulator, which is
+**Required — Android** (JDK 21 and the Android SDK; the SDK path comes from
+`local.properties`, which Android Studio writes, or from `ANDROID_HOME`):
+
+```bash
+./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug
+```
+
+**Optional — macOS with Xcode only.** Runs the same shared suite on the iOS simulator
+and links the iOS framework, proving the shared code stays portable. Not needed to
+review the Android submission:
+
+```bash
+./gradlew :shared:allTests :shared:linkDebugFrameworkIosSimulatorArm64
+```
+
+Measured counts: 216 backend tests; 191 shared client tests per target.
+
+**Checked by hand on an Android emulator**, from a fresh clone against a
+`docker compose` stack fed by the recorded catalogue: five configured featured products
+on Home under "Featured"; a category showing its top rated and remaining products;
+the Search button and the keyboard's search key each returning matching results; a
+product tile opening its details; an enquiry arriving in Mailhog with the thank-you
+shown; and a send attempted with Mailhog stopped keeping the form and offering Retry.
+
+The backend suite runs in about a second, and the shared client suite in seconds once
+Gradle is warm, with no network, no SMTP and no emulator, which is
 the point — it is fast enough to run between edits, as [SPEC.md](SPEC.md) §11.3 requires.
 The upstream catalogue is a recorded fixture, so a silent change to Fake Store fails a
 test rather than a screen.
@@ -396,9 +447,9 @@ verify it.
 
 ## Time spent
 
-_To be filled in honestly at the end, split across planning / building / testing /
-reviewing._
+**About 5.5 hours in total**, covering planning, building, testing and reviewing. The
+time was not tracked per phase, so no split is given here rather than an estimated one.
 
-The original target was 2–3 hours. Defining the user journey added scope beyond the base
-screens (see "Time-box" in [DECISIONS.md](DECISIONS.md)); the revised estimate is 4–5
-hours, accepted deliberately before building rather than discovered mid-build.
+That is over both time-boxes: the challenge's 2–3 hours, and the 4–5 hours set before
+building once the user journey added scope beyond the base screens (see "Time-box" in
+[DECISIONS.md](DECISIONS.md)).

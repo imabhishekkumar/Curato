@@ -38,8 +38,11 @@ is expected to evolve.
   `ProductRepository` (→ Fake Store adapter today) and `EmailService` (→ local Mailhog
   adapter today). Swapping either later is a new adapter, not a rewrite.
 - **Client:** Clean Architecture + MVVM (`data` / `domain` / `presentation` / `ui`),
-  kept to a single Gradle module with clean package boundaries rather than a true
-  multi-module split. Splitting into multiple Gradle modules is a reasonable future
+  with every layer in one shared Gradle module (`:shared`) and clean package boundaries
+  rather than a module per layer. A second module, `:androidApp`, holds only an
+  Activity, an Application and a manifest — AGP 9 forbids applying the Android
+  application plugin alongside Kotlin Multiplatform, so that split is a toolchain
+  requirement, not an architectural one (see "Client toolchain"). Splitting into multiple Gradle modules is a reasonable future
   shape if/when dependency boundaries or team ownership actually demand it — not an
   inherent correctness upgrade over a single module. It adds real build-configuration
   overhead that isn't justified for ~5 screens in a 2–3 hour box. Documented as a
@@ -934,7 +937,27 @@ both as next steps. Actual time spent is recorded in [README.md](README.md).
   shared across Android and iOS once built, so completing the iOS target is additive,
   not a parallel build.
 
+## Known issues at submission
+
+- **Fake Store blocks server-side requests.** Its Cloudflare front currently answers
+  Node's `fetch` with a `403` bot challenge while a browser or plain `curl` gets the
+  catalogue, so a live `docker compose up` can show every catalogue screen as
+  unavailable. The backend surfaces that correctly (`UPSTREAM_UNAVAILABLE`, retryable);
+  it does not try to get past the challenge. The upstream is configuration, so the
+  recorded fixture can stand in — see the README.
+- **A send that times out on the client can still be delivered.** The client gives up
+  after 15 seconds; the SMTP adapter sets no timeouts of its own, so with the mail server
+  unreachable the backend keeps trying for longer. Observed with Mailhog stopped: the
+  app showed "That took too long", the customer retried once Mailhog was back, and sales
+  received the enquiry twice. The fix is SMTP connection and socket timeouts shorter
+  than the client's deadline, so an unreachable server becomes `EMAIL_SEND_FAILED`
+  before the client stops waiting; an idempotency key on `POST /enquiries` would close
+  it fully.
+
 ## What I'd do next with another day
+
+- Bound the SMTP adapter's timeouts below the client deadline, and add an idempotency
+  key to `POST /enquiries` (see "Known issues at submission").
 
 - Persist submitted enquiries (e.g., to a database) instead of relying on email as the
   only record of a submission.

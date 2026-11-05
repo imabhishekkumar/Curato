@@ -5,8 +5,8 @@ validation rules, and acceptance criteria concrete enough to build and test agai
 
 | | |
 |---|---|
-| **Status** | Agreed, pre-implementation |
-| **Last updated** | 2026-11-03 |
+| **Status** | Implemented — backend and Android client |
+| **Last updated** | 2026-11-05 |
 | **Scope** | Backend API + Android client (Compose Multiplatform) |
 
 **Companion documents** — read alongside, not instead of:

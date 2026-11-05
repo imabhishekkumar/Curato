@@ -29,8 +29,7 @@ implementation, README.md owns *how to run* it. A single change often touches se
 keep them consistent rather than letting one drift.
 
 Then establish the **current shape** rather than assuming the docs describe something
-that exists: these docs state intent, and parts of the project are still unbuilt and
-marked as such. Check what is actually on disk (`git ls-files`, `git status`, the
+that exists: these docs state intent, and a doc can lag the code. Check what is actually on disk (`git ls-files`, `git status`, the
 directory tree) and reconcile it against the docs before acting. Where they disagree,
 the working tree is the truth about what exists and the docs are the truth about what
 was intended — flag the gap instead of quietly picking one.
@@ -43,9 +42,10 @@ A product catalogue PoC: customers browse/search products and submit an enquiry.
 
 - **Backend:** Node.js + TypeScript. Wraps the Fake Store API behind our own REST
   contract — the client never calls Fake Store directly.
-- **Client:** Kotlin Compose Multiplatform. Android is the primary target; the iOS
-  target is planned to be structurally scaffolded (shared `commonMain` code, `iosMain`
-  source set) but, like the rest of the client, not yet built or validated.
+- **Client:** Kotlin Compose Multiplatform. Android is the target built and validated
+  for this submission. The iOS target is scaffolded (shared `commonMain` code, an
+  `iosMain` source set) and the shared test suite runs on the iOS simulator, but no iOS
+  app is built or run.
 
 ## Architecture
 
