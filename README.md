@@ -132,6 +132,20 @@ cd backend && nvm use && npm ci && npm run dev
 That needs an SMTP listener on `SMTP_PORT` before enquiries will send; reads work without
 one, and `/health` will report `smtp: unreachable` until it exists.
 
+For day-to-day client work there is a script that does both halves — API on the host with
+hot reload, Mailhog in Docker for the SMTP listener — and wires the device up:
+
+```bash
+./scripts/dev.sh
+```
+
+It starts the Docker daemon if it is not already up, brings up Mailhog, runs the API on
+the Node version `backend/.nvmrc` pins, points every attached device at the host with
+`adb reverse`, and prints what `/health` reports for each dependency. Ctrl+C stops the API
+and removes the forwards; `./scripts/dev.sh --down` also stops Mailhog. It is a
+convenience over the two commands above, not a replacement for them — `docker compose up`
+remains the path a reviewer should use.
+
 ### 2. Android client (~5 minutes)
 
 Open the project in Android Studio, let Gradle sync, and run the `androidApp`
