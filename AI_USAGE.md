@@ -396,3 +396,11 @@ measuring it.
   It is also the honest limit of this one: roughly twenty launches, a fresh install,
   rotation and a lock cycle never reproduced it, so the change is reasoned rather than
   demonstrated, and that is recorded here rather than claimed as a verified fix.
+
+- **A convenience write ran before the fact it depended on.** On a confirmed send the
+  enquiry ViewModel saved the contact details *before* recording completion, so a
+  throwing store left the screen on a spinning form, kept `submitted` out of the draft,
+  and let the exception escape the coroutine — a delivered email presented as a send in
+  progress, and a restore that would offer the form again. Reordered so completion is
+  recorded first and the save's failure is contained, with cancellation still rethrown.
+  The regression test uses a store whose `save()` throws and fails on the old code.

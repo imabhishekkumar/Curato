@@ -667,7 +667,7 @@ These are frequently conflated; they are not the same thing and have opposite li
 |---|---|---|
 | Holds | `name`, `email`, `phone` | **Form values:** `name`, `email`, `phone`, `message`, `consentChecked`<br>**Completion state:** `submitted`, `acceptedAt` |
 | Lives in | Device-local persistence (§9.2) | `SavedStateHandle`, scoped to this route instance |
-| Written | On submission success, only with consent checked | Form values continuously as the user types; completion state on success |
+| Written | After submission success, only with consent checked. A failed write is dropped: it never undoes a confirmed send | Form values continuously as the user types; completion state on success, before the contact store is written |
 | Survives | App restarts, indefinitely | Process death only; dies with the route |
 | Cleared | On unchecking consent | **Form values** on success; **completion state** when the route leaves the back stack |
 

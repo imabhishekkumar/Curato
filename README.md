@@ -374,7 +374,8 @@ and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
   a restored `submitted` draft rendering the thank-you and firing **zero** calls; the
   message surviving process death in the draft while never entering the contact store;
   `seenPrice` reaching the request exactly as the route carried it, and absent optionals
-  omitted from the body rather than sent as `null`. Plus the §6 mirror boundary by
+  omitted from the body rather than sent as `null`; and a confirmed send keeping its
+  thank-you when saving the contact details on the device fails. Plus the §6 mirror boundary by
   boundary, including the addresses it must **not** reject — a client stricter than the
   server refuses submissions the backend would have accepted.
 - **One acceptance criterion is unit-only on purpose.** AC-6c's unknown slug cannot be

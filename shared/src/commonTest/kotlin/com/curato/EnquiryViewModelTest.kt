@@ -406,6 +406,55 @@ class EnquiryViewModelTest {
         )
     }
 
+    /**
+     * The backend confirmed the send, so a local storage failure must not undo it.
+     *
+     * Saving details for next time used to run before completion was recorded: a throwing
+     * store left the screen on a submitting form, kept `submitted` out of the draft, and
+     * escaped the coroutine — a confirmed email presented as a send still in progress,
+     * with a restore that would offer the form again.
+     */
+    @Test
+    fun a_failed_contact_save_still_shows_and_keeps_the_thank_you() = runTest(dispatcher) {
+        val contacts = FakeSavedContactRepository().apply {
+            saveFailure = IllegalStateException("disk full")
+        }
+        val enquiries = FakeEnquiryRepository()
+        val handle = SavedStateHandle(mapOf("enquiryDraft" to validDraft().encode()))
+        fun build() = EnquiryViewModel(
+            productId = 1,
+            seenPrice = 55.99,
+            handle = handle,
+            getProduct = GetProduct(FakeCatalogueRepository()),
+            submitEnquiry = SubmitEnquiry(enquiries),
+            observeSavedContact = ObserveSavedContact(contacts),
+            saveContact = SaveContact(contacts),
+            clearSavedContact = ClearSavedContact(contacts),
+        )
+        val vm = build()
+        testScheduler.advanceUntilIdle()
+
+        vm.submit()
+        testScheduler.advanceUntilIdle()
+
+        // The save was attempted, failed, and changed nothing the customer can see.
+        assertEquals(1, contacts.saves)
+        assertNull(contacts.saved)
+        assertEquals(1, enquiries.calls)
+        assertEquals(AcceptedAtFixture, assertIs<EnquiryUiState.Sent>(vm.state.value).acceptedAt)
+
+        // Not a retry, not a second send.
+        vm.submit()
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, enquiries.calls)
+
+        // Completion reached the draft, so a process-death restore is a thank-you too.
+        val restored = build()
+        testScheduler.advanceUntilIdle()
+        assertIs<EnquiryUiState.Sent>(restored.state.value)
+        assertEquals(1, enquiries.calls)
+    }
+
     /** AC-17: unchecking consent and submitting leaves nothing stored. */
     @Test
     fun success_without_consent_stores_nothing() = runTest(dispatcher) {

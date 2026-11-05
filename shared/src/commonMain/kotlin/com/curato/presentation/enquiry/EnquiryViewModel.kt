@@ -19,6 +19,7 @@ import com.curato.domain.validation.FIELD_PHONE
 import com.curato.domain.validation.VALIDATION_BANNER_MESSAGE
 import com.curato.domain.validation.validate
 import com.curato.domain.validation.validateField
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -248,12 +249,10 @@ class EnquiryViewModel(
             val enquiry = form.toEnquiry(productId = productId, seenPrice = seenPrice)
             when (val result = submitEnquiry(enquiry)) {
                 is ApiResult.Ok -> {
-                    // AC-17, and the whole reason consent is a recorded choice: with the
-                    // box unchecked the submission succeeds and leaves nothing behind.
-                    if (draft.consent) saveContact(enquiry.contact)
-
-                    // Values go, completion state arrives. In this order, so the draft is
-                    // never briefly a filled form that also claims to have been sent.
+                    // The backend has confirmed the send, so completion is recorded
+                    // **before** anything that can fail on this device. Values go,
+                    // completion state arrives, in one write, so the draft is never
+                    // briefly a filled form that also claims to have been sent.
                     writeDraft(
                         draft.completed(
                             acceptedAt = result.value.acceptedAt,
@@ -262,10 +261,33 @@ class EnquiryViewModel(
                         ),
                     )
                     transient.update { it.copy(submitting = false, banner = null) }
+
+                    // AC-17, and the whole reason consent is a recorded choice: with the
+                    // box unchecked the submission succeeds and leaves nothing behind.
+                    if (draft.consent) rememberContact(enquiry.contact)
                 }
 
                 is ApiResult.Fail -> onSubmitFailed(result.error)
             }
+        }
+    }
+
+    /**
+     * Saving details for next time is a convenience, never part of the send.
+     *
+     * The email has already gone and the thank-you is already recorded, so a storage
+     * failure here must not undo either: turning it into a failed send would invite a
+     * duplicate enquiry for one sales already has. The cost is that the next enquiry
+     * starts with an empty form. Cancellation is rethrown — swallowing it would keep a
+     * cleared ViewModel's coroutine running.
+     */
+    private suspend fun rememberContact(contact: Contact) {
+        try {
+            saveContact(contact)
+        } catch (cancellation: CancellationException) {
+            throw cancellation
+        } catch (_: Exception) {
+            // Deliberately dropped; see above. The shared layer has no logger.
         }
     }
 

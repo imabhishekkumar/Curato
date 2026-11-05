@@ -324,6 +324,20 @@ stopping the backend entirely, killing the process, and relaunching — the than
 back whole. Neither field makes anything submittable, which is the rule §7.6 is actually
 protecting.
 
+### Saving contact details never undoes a confirmed send
+
+After the backend confirms SMTP acceptance, the ViewModel records completion in the
+draft and shows the thank-you **first**, and only then writes the reusable contact
+store. A storage failure in that write is caught and dropped (cancellation is
+rethrown), so it cannot leave the screen on a spinning form, keep `submitted` out of the
+draft, or surface as a failed send.
+
+The alternative — reporting the storage failure — was rejected because the only honest
+message would be "your enquiry was sent, but we could not remember your details", and
+anything resembling a send failure invites a Retry that emails sales twice. The cost is
+silent: the next enquiry starts from an empty form. The shared layer has no logger, so
+the failure is not recorded anywhere; adding one is a next step.
+
 ## The client's validation mirror is deliberately looser than the server's
 
 §6 calls client-side validation "mirrored for immediate feedback" and makes the server

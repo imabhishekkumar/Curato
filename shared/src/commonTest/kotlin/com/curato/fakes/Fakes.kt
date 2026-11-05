@@ -225,10 +225,14 @@ class FakeSavedContactRepository(initial: Contact? = null) : SavedContactReposit
 
     val saved: Contact? get() = state.value
 
+    /** Set to make [save] throw, standing in for a full disk or a corrupt store. */
+    var saveFailure: Exception? = null
+
     override fun observe(): Flow<Contact?> = state
 
     override suspend fun save(contact: Contact) {
         saves++
+        saveFailure?.let { throw it }
         state.value = contact
     }
 
