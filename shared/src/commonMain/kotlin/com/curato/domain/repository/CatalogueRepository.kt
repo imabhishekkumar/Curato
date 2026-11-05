@@ -1,0 +1,48 @@
+package com.curato.domain.repository
+
+import com.curato.domain.ApiResult
+import com.curato.domain.model.CategoryDetail
+import com.curato.domain.model.CategoryShelf
+import com.curato.domain.model.FeaturedShelf
+import com.curato.domain.model.Product
+import com.curato.domain.model.SearchResults
+
+/**
+ * The catalogue, behind an interface.
+ *
+ * Home's two calls are separate methods because they are separate requests fired in
+ * parallel, each owning its own sections and each able to fail without the other.
+ * Collapsing them into one `getHomeScreen()` would re-couple exactly what SPEC.md §7.2
+ * went to trouble to separate.
+ */
+interface CatalogueRepository {
+    suspend fun getFeatured(): ApiResult<FeaturedShelf>
+    suspend fun getCategoryShelves(): ApiResult<List<CategoryShelf>>
+
+    /**
+     * One category in full, by slug (SPEC.md §4.3).
+     *
+     * An unknown slug is a `NOT_FOUND` failure rather than an empty success — resolution
+     * is the backend's job, and a client that treated "no such category" as "a category
+     * with nothing in it" would render a convincing blank page instead of an error.
+     */
+    suspend fun getCategory(slug: String): ApiResult<CategoryDetail>
+
+    /**
+     * One product in full, by id (SPEC.md §4.5).
+     *
+     * The product screen resolves itself through this and never accepts an object from
+     * whatever list opened it, which is what makes every entry point — and a future
+     * deeplink — identical.
+     */
+    suspend fun getProduct(id: Int): ApiResult<Product>
+
+    /**
+     * Search the catalogue (SPEC.md §4.4).
+     *
+     * A term that matches nothing is an `Ok` holding an empty list, never a failure
+     * (AC-8) — the search succeeded, and the screen that renders it says so. Only a
+     * transport problem, a rejected term or a backend fault produces a `Fail`.
+     */
+    suspend fun searchProducts(query: String): ApiResult<SearchResults>
+}
