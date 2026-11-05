@@ -32,6 +32,7 @@ androidx-core-splashscreen = { module = "androidx.core:core-splashscreen", versi
 compose-ui-android = { module = "androidx.compose.ui:ui", version.ref = "androidx-compose-ui" }
 navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigation-compose" }
 lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "lifecycle-viewmodel" }
+lifecycle-viewmodel-savedstate = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-savedstate", version.ref = "lifecycle-viewmodel" }
 
 # --- Images ---
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }

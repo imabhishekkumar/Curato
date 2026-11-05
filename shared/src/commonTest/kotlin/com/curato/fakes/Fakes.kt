@@ -12,8 +12,10 @@ import com.curato.domain.model.Product
 import com.curato.domain.model.ProductSummary
 import com.curato.domain.model.Rating
 import com.curato.domain.model.RecentProduct
+import com.curato.domain.model.SearchResults
 import com.curato.domain.repository.CatalogueRepository
 import com.curato.domain.repository.RecentlyViewedRepository
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -60,6 +62,12 @@ fun product(
     rating = Rating(rate, count),
 )
 
+/** One search's answer. The echoed `query` is what the results screen quotes. */
+fun searchResults(
+    query: String = "bag",
+    products: List<ProductSummary> = listOf(summary(1)),
+) = SearchResults(query = query, products = products)
+
 fun recent(id: Int, viewedAt: Long = id.toLong()) = RecentProduct(
     id = id,
     title = "Product $id",
@@ -83,15 +91,29 @@ class FakeCatalogueRepository : CatalogueRepository {
 
     var categoryDetail: ApiResult<CategoryDetail> = ApiResult.Ok(detail())
     var product: ApiResult<Product> = ApiResult.Ok(product(1))
+    var search: ApiResult<SearchResults> = ApiResult.Ok(searchResults())
 
     var featuredCalls = 0
     var categoryCalls = 0
     var categoryDetailCalls = 0
     var productCalls = 0
+    var searchCalls = 0
+
+    /** Virtual milliseconds a search takes. See [searchProducts]. */
+    var searchLatencyMillis: Long = 0
 
     /** Recorded so a test can prove the route's slug arrives unmangled. */
     var lastSlug: String? = null
     var lastProductId: Int? = null
+
+    /**
+     * Every term the repository was asked for, in order.
+     *
+     * A list rather than a single value, because the debounce's whole claim is about how
+     * *many* searches a burst of typing produces — a `lastQuery` could not tell the
+     * difference between one request and eight.
+     */
+    val searchQueries = mutableListOf<String>()
 
     override suspend fun getFeatured(): ApiResult<FeaturedShelf> {
         featuredCalls++
@@ -113,6 +135,16 @@ class FakeCatalogueRepository : CatalogueRepository {
         productCalls++
         lastProductId = id
         return product
+    }
+
+    override suspend fun searchProducts(query: String): ApiResult<SearchResults> {
+        searchCalls++
+        searchQueries += query
+        // Zero by default, so most tests are unaffected. Set it to put the call genuinely
+        // in flight: with an instant fake there is no moment at which `Loading` is the
+        // state, and the one thing the loading branch exists for could not be asserted.
+        if (searchLatencyMillis > 0) delay(searchLatencyMillis)
+        return search
     }
 }
 

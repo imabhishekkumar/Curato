@@ -12,14 +12,17 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import io.ktor.http.encodeURLParameter
 import androidx.savedstate.read
 import com.curato.presentation.category.CategoryViewModel
 import com.curato.presentation.home.HomeViewModel
 import com.curato.presentation.product.ProductViewModel
+import com.curato.presentation.search.SearchViewModel
 import com.curato.ui.category.CategoryScreen
 import com.curato.ui.designsystem.StatePanel
 import com.curato.ui.home.HomeScreen
 import com.curato.ui.product.ProductScreen
+import com.curato.ui.search.SearchScreen
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
@@ -37,7 +40,15 @@ object Routes {
     const val PRODUCT = "product/{id}"
     const val ENQUIRE = "product/{id}/enquire?seenPrice={seenPrice}"
 
-    fun search(query: String = "") = "search?q=$query"
+    /**
+     * The one route parameter a **customer** supplies rather than the backend.
+     *
+     * Encoded, unlike the slug and the id: those are backend-minted and known safe,
+     * whereas a search term containing a space, `&` or `#` concatenated into a query
+     * string would silently become a *different* route rather than fail. Ktor's encoder
+     * is used rather than a hand-rolled one because the client already depends on it.
+     */
+    fun search(query: String = "") = "search?q=${query.encodeURLParameter()}"
     fun category(slug: String) = "category/$slug"
     fun product(id: Int) = "product/$id"
 
@@ -112,17 +123,40 @@ fun CuratoNavHost(
             )
         }
 
-        // The remaining two routes are declared with their parameter types so taps
-        // navigate for real rather than into nothing. Each is replaced by its screen in
-        // a later pass.
         composable(
             route = Routes.SEARCH,
             arguments = listOf(
                 navArgument("q") { type = NavType.StringType; defaultValue = "" },
             ),
         ) { entry ->
-            NotBuiltYet("Search", entry.arguments?.read { getStringOrNull("q") })
+            // The only screen whose parameter is read from the entry's `SavedStateHandle`
+            // rather than its arguments. Navigation seeds the handle *from* those
+            // arguments, so `handle["q"]` is the route's term on first creation and the
+            // typed term afterwards — and unlike a slug or an id, this one changes while
+            // the screen is open, so the route stops being a record of it.
+            val viewModel: SearchViewModel = koinViewModel {
+                parametersOf(entry.savedStateHandle)
+            }
+            val query by viewModel.query.collectAsStateWithLifecycle()
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            SearchScreen(
+                query = query,
+                state = state,
+                onQueryChange = viewModel::onQueryChange,
+                onProductClick = { id -> navController.navigate(Routes.product(id)) },
+                onRetry = viewModel::retry,
+                onBack = { navController.popBackStack() },
+                // The empty state's copy points at "a category from home", and Home is
+                // where the category shelves are — so it returns there rather than
+                // inventing a categories screen the app does not have.
+                onBrowseCategories = {
+                    navController.popBackStack(Routes.HOME, inclusive = false)
+                },
+            )
         }
+
+        // Declared with its parameter types so the tap navigates for real rather than into
+        // nothing. Replaced by its screen in the next pass.
 
         composable(
             route = Routes.ENQUIRE,

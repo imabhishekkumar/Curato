@@ -95,3 +95,23 @@ data class CategoryProductsDto(
     val topRated: List<ProductSummaryDto>,
     val additional: List<ProductSummaryDto> = emptyList(),
 )
+
+/**
+ * `GET /products/search?q={query}` (SPEC.md §4.4).
+ *
+ * [query] is the term the **server** matched on, echoed back trimmed. It is not the same
+ * string the customer typed, and the results screen quotes this one: §4.4 matches against
+ * `description`, which `ProductSummary` does not carry, so a product can be returned for a
+ * term that appears nowhere on its card. Naming the matched term is what makes that read
+ * as a search rather than as a bug.
+ *
+ * [results] carries no default, for the reason [CategoryProductsDto.topRated] does not: an
+ * empty list is a real and expected answer, but a *missing* key is a malformed response,
+ * and it should fail the parse into `UNEXPECTED_RESPONSE` rather than render a convincing
+ * "no products match".
+ */
+@Serializable
+data class SearchResultsDto(
+    val query: String,
+    val results: List<ProductSummaryDto>,
+)

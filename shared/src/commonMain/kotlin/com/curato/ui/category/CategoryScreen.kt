@@ -17,8 +17,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyGridScope
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material3.MaterialTheme
@@ -34,15 +32,15 @@ import com.curato.domain.model.ProductSummary
 import com.curato.presentation.category.CategoryUiState
 import com.curato.ui.designsystem.CuratoTopBar
 import com.curato.ui.designsystem.PanelAction
+import com.curato.ui.designsystem.ProductCardAspectRatio
 import com.curato.ui.designsystem.ProductCard
+import com.curato.ui.designsystem.ProductGridColumns
 import com.curato.ui.designsystem.SectionHeader
+import com.curato.ui.designsystem.fullWidthItem
 import com.curato.ui.designsystem.ShimmerBox
 import com.curato.ui.designsystem.ShimmerSection
 import com.curato.ui.designsystem.Spacing
 import com.curato.ui.designsystem.StatePanel
-
-/** Two up, per the kit: this screen is for browsing a whole category, so it scrolls down. */
-private const val GridColumns = 2
 
 /**
  * Category (SPEC.md §7.3).
@@ -112,7 +110,7 @@ private fun CategoryGrid(
     bottomInset: Dp,
 ) {
     LazyVerticalGrid(
-        columns = GridCells.Fixed(GridColumns),
+        columns = GridCells.Fixed(ProductGridColumns),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             start = Spacing.gutter,
@@ -123,7 +121,7 @@ private fun CategoryGrid(
         horizontalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
         verticalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
     ) {
-        fullWidth { SectionHeader(title = "Top rated in ${detail.category.name}") }
+        fullWidthItem { SectionHeader(title = "Top rated in ${detail.category.name}") }
         items(detail.topRated, key = { it.id }) { product ->
             CategoryCard(product, onProductClick)
         }
@@ -132,7 +130,7 @@ private fun CategoryGrid(
         // category of five or fewer has no remainder, and a second heading above nothing
         // would invite a scroll that finds nothing.
         if (showAdditional) {
-            fullWidth {
+            fullWidthItem {
                 SectionHeader(
                     title = "More in ${detail.category.name}",
                     // The grid already spaces rows by 12dp; this makes the gap between
@@ -176,7 +174,7 @@ private fun CategoryPlaceholder(bottomInset: Dp) {
     // clock and they sweep together instead of shimmering out of phase.
     ShimmerSection {
         LazyVerticalGrid(
-            columns = GridCells.Fixed(GridColumns),
+            columns = GridCells.Fixed(ProductGridColumns),
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = Spacing.gutter,
@@ -188,7 +186,7 @@ private fun CategoryPlaceholder(bottomInset: Dp) {
             verticalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
             userScrollEnabled = false,
         ) {
-            fullWidth {
+            fullWidthItem {
                 // Wrapped, because a grid measures its items at a *fixed* width rather
                 // than a maximum one: `width(140.dp)` alone cannot shrink below the slot,
                 // and the title placeholder comes out full width, reading as a banner.
@@ -199,7 +197,7 @@ private fun CategoryPlaceholder(bottomInset: Dp) {
             items(PlaceholderCardCount) {
                 // Squared off to the card's own proportions, so the real grid does not
                 // reflow when it replaces this.
-                ShimmerBox(modifier = Modifier.fillMaxWidth().aspectRatio(CardAspectRatio))
+                ShimmerBox(modifier = Modifier.fillMaxWidth().aspectRatio(ProductCardAspectRatio))
             }
         }
     }
@@ -240,14 +238,3 @@ private fun CategoryError(error: DomainError, onRetry: () -> Unit, onBack: () ->
 
 /** Two rows of two — enough to read as a grid without claiming to know the real count. */
 private const val PlaceholderCardCount = 4
-
-/**
- * A card's height relative to its width: a square image, plus two title lines, a price
- * and a rating line, plus the 16dp gutter top and bottom.
- */
-private const val CardAspectRatio = 0.62f
-
-/** A header spanning every column, so the grid can hold a section title. */
-private fun LazyGridScope.fullWidth(content: @Composable () -> Unit) {
-    item(span = { GridItemSpan(maxLineSpan) }) { content() }
-}

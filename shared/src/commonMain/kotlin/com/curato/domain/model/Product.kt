@@ -74,3 +74,17 @@ data class CategoryDetail(
     val topRated: List<ProductSummary>,
     val additional: List<ProductSummary>,
 )
+
+/**
+ * One search's answer (SPEC.md §4.4) — the Search screen's payload.
+ *
+ * [query] is the server's trimmed term, carried rather than discarded because the screen
+ * quotes it: the match reads `description`, which a [ProductSummary] has no room for, so
+ * the only honest way to explain a result is to name what was matched.
+ *
+ * An empty [products] is a successful search (AC-8), never a failure.
+ */
+data class SearchResults(
+    val query: String,
+    val products: List<ProductSummary>,
+)

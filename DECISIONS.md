@@ -238,6 +238,75 @@ It is also deliberately a `String` in the route rather than `NavType.FloatType`.
 are `Double`, and rounding one through a float to save four bytes is how 109.95 becomes
 109.94999 in an email to sales. Absent, blank and unparseable all collapse to null.
 
+## Search as you type, with a debounce
+
+Results arrive 300ms after the field stops changing, with no submit control. SPEC §7.4
+says only that "submission is disabled below 2 characters" and never mentions debounce
+either way, so this is a choice rather than a reading.
+
+The 300ms is the Screen Kit's own `emphasized` duration rather than a new number. It is
+what turns typing `backpack` into one request instead of eight — measured through a
+proxy on a device, not assumed — while a deliberate pause mid-word still produces two,
+which is the behaviour a customer correcting a term actually wants.
+
+**The debounce applies to typing, and only to typing.** A query restored after process
+death, and a Retry after a failure, both fire immediately: neither is mid-keystroke, and
+making a restored screen wait 300ms behind a "Keep typing" panel it is certain to replace
+is a flicker for nothing.
+
+Two smaller rules fall out of it. A term is skipped if it equals the query the server
+already echoed, so `"bag"` → `"bag "` does not spend a request redrawing an identical
+grid. And shortening a term below two characters cancels the search already in flight,
+rather than letting its results land on a screen that stopped asking for them.
+
+The alternative — an explicit submit key — would have read §7.4 more literally and kept
+timing out of the tests. It was rejected because a 20-product catalogue answers in
+milliseconds, and making someone press a key to see that is friction with nothing behind
+it.
+
+## A `SavedStateHandle`, for the one screen that needs one
+
+`CategoryViewModel` and `ProductViewModel` both take their route parameter as a plain
+constructor argument, and both carry a comment saying a `SavedStateHandle` would buy
+nothing — the slug and the id already live in the back-stack entry, and Navigation
+restores them. `SearchViewModel` takes one. Those positions do not conflict: a slug and
+an id cannot change while the screen is open, and a search term changes with every
+keystroke, so the route it arrived on stops describing it immediately.
+
+This is what §7.4 asks for and what the table in *State persistence* above already
+anticipated. It arrives through the existing `parametersOf(...)` path as
+`entry.savedStateHandle`, so it needs no new Koin capability — and the query is read with
+`getStateFlow`, which makes the field's text persisted *by construction*: there is no
+second copy held beside it and nothing to forget to write. Navigation seeds that handle
+from the route's arguments, so `search?q=bag` is read from the same place, with no
+separate seed parameter that could disagree with it.
+
+Verified the only way it can be: killing the process with the task backgrounded and
+resuming it. A new pid comes up with the term still in the field and the search re-run.
+
+## Where the Screen Kit contradicts itself
+
+Two places, both resolved toward the drawn artifact over the written table.
+
+**The search field.** The kit's component inventory lists `AppTextField` — "label always
+rendered", 10dp radius — against Search. The three Search frames it actually draws are a
+label-less 999px pill in the app bar, with a leading magnifier and no clear control. The
+mockup is the more specific of the two, so Search gets its own `SearchField`, and the
+labelled variant waits for Enquiry, where it is the thing the kit draws. There is also no
+clear affordance and no glyph for one anywhere in the kit's sprite, so none was invented.
+
+**The below-minimum copy.** The kit says this panel uses "the same copy as the server's
+`fieldErrors.q`", then draws *"Enter at least 2 characters to search."* where the server
+sends *"Enter at least 2 characters"*. The caption's intent beats its own drawing: there
+is one constant, holding the server's exact string, and a test asserts it equals the
+`fieldErrors.q` a real 422 carries. The claim is now mechanically true rather than nearly
+true.
+
+The kit draws no loading and no error frame for Search, though both are reachable — §4.4
+lists `UPSTREAM_UNAVAILABLE` and `INTERNAL_ERROR`, and the client adds
+`NETWORK_UNAVAILABLE` and `TIMEOUT`. Both are derived from Category's drawn equivalents,
+since the two screens share a grid.
+
 ## A clock, injected
 
 `RecentProduct.viewedAt` had never been written: nothing called `record()` until the
@@ -265,6 +334,13 @@ component library because the current PoC does not justify that complexity. The
 components will live in `ui/designsystem` within `commonMain` as a dedicated package,
 which is a one-step extraction to a real module later if/when reuse pressure justifies
 it.
+
+## Android app identity
+
+The Catalogue mark uses three product cards to represent browsing. One vector
+serves as the adaptive launcher foreground, the themed launcher silhouette, and
+the system splash mark. The launcher and splash icon use the kit's teal and mint,
+with the splash window matching the app surface in each theme.
 
 ## User journey and navigation
 

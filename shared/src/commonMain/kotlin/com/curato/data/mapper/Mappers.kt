@@ -9,6 +9,7 @@ import com.curato.data.remote.dto.HomeDto
 import com.curato.data.remote.dto.ProductDto
 import com.curato.data.remote.dto.ProductSummaryDto
 import com.curato.data.remote.dto.RatingDto
+import com.curato.data.remote.dto.SearchResultsDto
 import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryRef
 import com.curato.domain.model.CategoryShelf
@@ -17,6 +18,7 @@ import com.curato.domain.model.FeaturedSource
 import com.curato.domain.model.Product
 import com.curato.domain.model.ProductSummary
 import com.curato.domain.model.Rating
+import com.curato.domain.model.SearchResults
 
 /** Wire → domain. The only place the two vocabularies meet. */
 
@@ -73,4 +75,10 @@ fun CategoryProductsDto.toDomain() = CategoryDetail(
     category = category.toDomain(),
     topRated = topRated.map { it.toDomain() },
     additional = additional.map { it.toDomain() },
+)
+
+/** Order is preserved exactly: the backend ranked these, and the client does not re-sort. */
+fun SearchResultsDto.toDomain() = SearchResults(
+    query = query,
+    products = results.map { it.toDomain() },
 )

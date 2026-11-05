@@ -12,9 +12,11 @@ import com.curato.domain.usecase.GetFeaturedShelf
 import com.curato.domain.usecase.GetProduct
 import com.curato.domain.usecase.ObserveRecentlyViewed
 import com.curato.domain.usecase.RecordProductViewed
+import com.curato.domain.usecase.SearchProducts
 import com.curato.presentation.category.CategoryViewModel
 import com.curato.presentation.home.HomeViewModel
 import com.curato.presentation.product.ProductViewModel
+import com.curato.presentation.search.SearchViewModel
 import org.koin.core.module.Module
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
@@ -45,6 +47,7 @@ val sharedModule: Module = module {
     factory { GetCategoryShelves(repository = get()) }
     factory { GetCategory(repository = get()) }
     factory { GetProduct(repository = get()) }
+    factory { SearchProducts(repository = get()) }
     factory { ObserveRecentlyViewed(repository = get()) }
     factory { RecordProductViewed(repository = get()) }
 
@@ -68,6 +71,12 @@ val sharedModule: Module = module {
             recordProductViewed = get(),
         )
     }
+
+    // The one ViewModel here that does take a `SavedStateHandle`. The two above hold route
+    // parameters that cannot change while the screen is open, so the back-stack entry is
+    // already their record; a search term changes with every keystroke, and the route it
+    // arrived on stops describing it immediately. SPEC.md §7.4 names the mechanism.
+    viewModel { params -> SearchViewModel(handle = params.get(), searchProducts = get()) }
 }
 
 private inline fun <reified T : Any> org.koin.core.scope.Scope.get(named: String): T =

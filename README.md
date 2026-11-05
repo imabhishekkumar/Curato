@@ -2,12 +2,13 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: backend complete; client foundation, Home, Category and Product built and
-> running.** Verified on a device: the backend suite passes on Node 22, the stack comes
-> up under docker compose, and the Android app browses from Home through a category to a
-> product against it on an emulator, with its own 66 shared tests green on two targets.
-> **Not yet built:** the Search and Enquiry screens — their routes exist and navigate,
-> but each shows a placeholder.
+> **Status: backend complete; client foundation, Home, Category, Product and Search
+> built and running.** Verified on a device: the backend suite passes on Node 22, the
+> stack comes up under docker compose, and the Android app browses from Home through a
+> category to a product — and searches the catalogue — against it on an emulator, with
+> its own 98 shared tests green on two targets. **Not yet built:** the Enquiry screen —
+> its route exists and carries both the product id and the price that was on screen, but
+> it shows a placeholder.
 
 ## Stack, and why
 
@@ -52,8 +53,10 @@ component inventory they are drawn from.
   only (no account, no tracking). Renders without a network call, so it works offline.
 - **Category page** — opened from a shelf's "View all"; shows the top-rated products in
   that category plus the remaining ones.
-- **Search** — enter a term and search; results open on their own screen, so going back
-  from a product returns you to your results rather than a reset home screen.
+- **Search** — results arrive as you type, on their own screen, so going back from a
+  product returns you to your results rather than a reset home screen. Matching reads the
+  product description as well as the title, so the result count names the term it matched
+  on — that is why a search for "baseball" returns a t-shirt whose title never says so.
 - **Product page** — full details, with "Enquire" pinned to the bottom of the screen
   within thumb reach.
 - **Enquiry** — name and email required, phone and message optional. Your contact details
@@ -268,11 +271,11 @@ colour, the Inter type scale with tabular figures, the 4dp spacing base, radii, 
 durations and the 48dp touch-target floor.
 
 **Built:** the design system, the network and envelope layer, DI, navigation, the
-device-local recently-viewed store, Home, Category and Product. **Not built:** Search
-and Enquiry — their routes exist and carry the right primitives, but each renders a
-placeholder naming the parameters it resolved. Tapping **Enquire** on a product already
-navigates with both the id and the price that was on screen, so the `seenPrice`
-diagnostic is live before the screen that sends it exists.
+device-local recently-viewed store, Home, Category, Product and Search. **Not built:**
+Enquiry — its route exists and carries the right primitives, but it renders a placeholder
+naming the parameters it resolved. Tapping **Enquire** on a product already navigates with
+both the id and the price that was on screen, so the `seenPrice` diagnostic is live before
+the screen that sends it exists.
 
 ## Where to change things
 
@@ -297,7 +300,7 @@ require reading the whole repo first.
 
 ```bash
 cd backend && nvm use && npm ci && npm run typecheck && npm test   # 216 tests
-./gradlew :shared:allTests                                          # 66, on two targets
+./gradlew :shared:allTests                                          # 98, on two targets
 ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64               # proves iOS compiles
 ```
 

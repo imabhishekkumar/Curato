@@ -2,6 +2,7 @@ package com.curato.ui.designsystem
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -60,6 +61,46 @@ fun CuratoTopBar(
     elevated: Boolean = true,
     backContentDescription: String = "Back",
 ) {
+    CuratoTopBar(
+        onBack = onBack,
+        modifier = modifier,
+        elevated = elevated,
+        backContentDescription = backContentDescription,
+    ) {
+        if (!title.isNullOrBlank()) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                // One line with an ellipsis, per the kit. A category name that wrapped
+                // would change the bar's height between screens.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = Spacing.x2),
+            )
+        }
+    }
+}
+
+/**
+ * The same bar, with whatever the screen needs where a title would go.
+ *
+ * Search puts an editable field there, which is the kit's own arrangement — the field
+ * lives in the app bar rather than above the content, so the one row that keeps Back
+ * reachable is not spent twice. The inset handling, the 52dp height, the 48dp back target
+ * and the `elevated` rule are all here rather than copied into that screen.
+ *
+ * [content] is given a `RowScope`, so a field can claim the remaining width with
+ * `Modifier.weight(1f)` exactly as the kit's `flex: 1` does.
+ */
+@Composable
+fun CuratoTopBar(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    elevated: Boolean = true,
+    backContentDescription: String = "Back",
+    content: @Composable RowScope.() -> Unit,
+) {
     Surface(
         modifier = modifier.fillMaxWidth(),
         color = if (elevated) {
@@ -93,18 +134,7 @@ fun CuratoTopBar(
                 )
             }
 
-            if (!title.isNullOrBlank()) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    // One line with an ellipsis, per the kit. A category name that wrapped
-                    // would change the bar's height between screens.
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(start = Spacing.x2),
-                )
-            }
+            content()
         }
     }
 

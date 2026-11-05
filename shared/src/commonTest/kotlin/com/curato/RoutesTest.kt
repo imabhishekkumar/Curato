@@ -45,4 +45,41 @@ class RoutesTest {
         assertTrue(Routes.enquire(1, 109.95).endsWith("109.95"))
         assertTrue(Routes.enquire(1, 999.99).endsWith("999.99"))
     }
+
+    /** Home opens Search with nothing typed, which still has to match the pattern. */
+    @Test
+    fun search_opens_with_an_empty_term() {
+        assertEquals("search?q=", Routes.search())
+        assertEquals("search?q=", Routes.search(""))
+    }
+
+    @Test
+    fun a_plain_term_rides_the_search_route_unchanged() {
+        assertEquals("search?q=bag", Routes.search("bag"))
+    }
+
+    /**
+     * The one route parameter a customer supplies, so the only one that can be hostile.
+     *
+     * A space or an `&` interpolated raw would not fail — it would quietly become a
+     * *different* route, or a second query parameter, and the search would run on a term
+     * nobody typed.
+     */
+    @Test
+    fun a_term_needing_escaping_is_encoded_rather_than_breaking_the_route() {
+        // `%20` rather than `+`: Ktor's encoder does not use the form-encoding shorthand,
+        // which is the stricter of the two — `+` is only a space by convention, and
+        // Navigation's own decoder would have to share that convention for it to survive.
+        assertEquals("search?q=winter%20jacket", Routes.search("winter jacket"))
+        assertEquals("search?q=salt%20%26%20pepper", Routes.search("salt & pepper"))
+        assertTrue(Routes.search("a#b").endsWith("%23b"), Routes.search("a#b"))
+        // Exactly one `?` and one `q=`, whatever the term contains.
+        assertEquals(1, Routes.search("a&q=b").count { it == '?' })
+    }
+
+    @Test
+    fun the_search_builder_matches_the_declared_pattern() {
+        assertEquals("search?q={q}", Routes.SEARCH)
+        assertTrue(Routes.search("bag").startsWith("search?q="))
+    }
 }

@@ -99,6 +99,13 @@ system to a `commonMain` package instead of a Gradle module; writing SPEC.md as 
 buildable statement of the settled decisions; and adopting Conventional Commits with a
 PR template.
 
+## Android app identity
+
+- Codex (GPT-6) and built-in ImageGen explored launcher concepts. The README
+  established catalogue browsing, search, and enquiries as the product context.
+  The user selected Catalogue, and Codex recreated the three-card mark as a
+  shared vector for the launcher, themed icons, and system splash.
+
 ## Where AI got something wrong and how it was caught
 
 Appended as the work progresses. Substantive technical errors only — a trust boundary
@@ -284,3 +291,35 @@ measuring it.
   both were noise. Recording them because the failure mode is specific — writing a
   plausible-looking line to satisfy a half-finished thought, then letting a green build
   stand in for having read it back.
+
+- **A screen reader's view of the layout is not what is on the screen.** The search
+  screen's empty and error panels centre themselves in the content area, and the content
+  area ran underneath the software keyboard — so "Browse categories" and Retry were laid
+  out at y≈830 on a screen whose keyboard started at y≈660. Both were drawn, both were
+  untappable. I missed it twice, because `uiautomator dump` reports *layout* bounds and
+  cheerfully listed the button as present; the dump and the assertion based on it were
+  both green. It surfaced only when a tap aimed at Retry typed an `r` into the field
+  instead. The fix is one `imePadding()` on the content, and the reason it was missing is
+  structural: every other screen either has no keyboard or has a `StickyActionBar`, which
+  is where the kit puts `imePadding()` — Search is the first screen with a keyboard and no
+  sticky bar. **A tool that reads the view tree cannot see occlusion. Screenshots can.**
+
+- **A placeholder that did not reserve a row made the results jump.** The loading grid
+  omitted the "4 results for …" row on the reasoning that a shimmer should not claim a
+  number it cannot know. True, but the row is 20dp of height, so the whole grid slid up
+  when the real results replaced it. Reserving the space is not claiming the number —
+  and once the placeholder's padding matched the results grid exactly, the jump went. The
+  plan I had written said explicitly "no count row"; it was wrong, and the screenshot is
+  what said so.
+
+- **An assertion I wrote was wrong where the code was right.** The first route test
+  expected `search?q=winter+jacket`. Ktor encodes a space as `%20`, which is the stricter
+  and less ambiguous form — `+` only means a space by form-encoding convention, and
+  Navigation's decoder would have to share that convention for it to survive the trip.
+  Worth recording because the failing test looked at first like a bug in the encoder, and
+  the right move was to check which behaviour was actually correct before changing either.
+
+- **The debounce needed a control case to mean anything.** "Typing `backpack` fires one
+  request" is only evidence if more than one request is possible, so the device check also
+  types `cot`, pauses, then `ton` and requires exactly two. Without the second half, a
+  screen that had silently stopped searching altogether would have passed the first.

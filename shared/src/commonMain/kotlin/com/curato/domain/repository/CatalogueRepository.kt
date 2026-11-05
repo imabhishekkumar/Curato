@@ -5,6 +5,7 @@ import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
 import com.curato.domain.model.Product
+import com.curato.domain.model.SearchResults
 
 /**
  * The catalogue, behind an interface.
@@ -35,4 +36,13 @@ interface CatalogueRepository {
      * deeplink — identical.
      */
     suspend fun getProduct(id: Int): ApiResult<Product>
+
+    /**
+     * Search the catalogue (SPEC.md §4.4).
+     *
+     * A term that matches nothing is an `Ok` holding an empty list, never a failure
+     * (AC-8) — the search succeeded, and the screen that renders it says so. Only a
+     * transport problem, a rejected term or a backend fault produces a `Fail`.
+     */
+    suspend fun searchProducts(query: String): ApiResult<SearchResults>
 }

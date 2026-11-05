@@ -6,6 +6,7 @@ import com.curato.data.remote.dto.CategoryProductsDto
 import com.curato.data.remote.dto.EnvelopeDto
 import com.curato.data.remote.dto.HomeDto
 import com.curato.data.remote.dto.ProductDto
+import com.curato.data.remote.dto.SearchResultsDto
 import com.curato.domain.ApiResult
 import com.curato.domain.DomainError
 import com.curato.CuratoLog
@@ -59,6 +60,27 @@ class CuratoApi(
     suspend fun getProduct(id: Int): ApiResult<ProductDto> =
         request {
             client.get(baseUrl) { url { appendPathSegments("products", id.toString()) } }
+        }
+
+    /**
+     * Search (SPEC.md §4.4).
+     *
+     * The term goes in through `parameters.append`, so Ktor percent-encodes it. This is
+     * the first endpoint carrying a value the **customer** typed rather than one the
+     * backend minted, and a term containing `&`, `#` or a space concatenated into a query
+     * string would be silently truncated into a different search rather than rejected.
+     *
+     * Trimming is deliberately *not* done here. The backend trims and echoes what it
+     * matched on, and a client that pre-trimmed would be asserting a rule it does not own.
+     */
+    suspend fun searchProducts(query: String): ApiResult<SearchResultsDto> =
+        request {
+            client.get(baseUrl) {
+                url {
+                    appendPathSegments("products", "search")
+                    parameters.append("q", query)
+                }
+            }
         }
 
     /**
