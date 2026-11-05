@@ -4,9 +4,10 @@
       The platform splash screen API, per SPEC.md §7.1 — no custom screen, no timed
       delay, no branding animation. It hands off the moment Home's first frame is ready.
     -->
-    <style name="Theme.Curato.Starting" parent="Theme.SplashScreen">
+    <style name="Theme.Curato.Starting" parent="Theme.SplashScreen.IconBackground">
         <item name="windowSplashScreenBackground">@color/splash_background</item>
-        <item name="windowSplashScreenAnimatedIcon">@android:drawable/sym_def_app_icon</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/curato_catalogue_mark</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/curato_icon_background</item>
         <item name="postSplashScreenTheme">@style/Theme.Curato</item>
     </style>
 

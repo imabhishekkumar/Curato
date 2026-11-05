@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Fixed brand colors from the Curato Screen Kit. -->
+    <color name="curato_icon_background">#0F5F57</color>
+    <color name="curato_icon_foreground">#BFE5DE</color>
+
     <!-- Matches the light surface token from the screen kit, so the splash does not
          flash a different background before the first Compose frame. -->
     <color name="splash_background">#FBFCFA</color>
