@@ -262,10 +262,14 @@ death, and a Retry after a failure, both fire immediately: neither is mid-keystr
 making a restored screen wait 300ms behind a "Keep typing" panel it is certain to replace
 is a flicker for nothing.
 
-Two smaller rules fall out of it. A term is skipped if it equals the query the server
-already echoed, so `"bag"` → `"bag "` does not spend a request redrawing an identical
-grid. And shortening a term below two characters cancels the search already in flight,
-rather than letting its results land on a screen that stopped asking for them.
+**A search is abandoned whenever the field stops asking for it.** Shortening a term below
+two characters cancels the search in flight. So does returning the field to the term
+whose results are already on screen: "bag" → "jacket" → "bag" inside the debounce sends
+nothing new, and the queued "jacket" search is cancelled rather than left to fire and
+draw jacket results under a field reading "bag". A whitespace-only edit (`"bag"` →
+`"bag "`) is the same search and is not re-sent. As a last guard, a cancelled search
+checks it is still active before writing its result, so a repository that returns after
+cancellation still cannot replace the current answer.
 
 The alternative — an explicit submit key — would have read §7.4 more literally and kept
 timing out of the tests. It was rejected because a 20-product catalogue answers in

@@ -404,3 +404,11 @@ measuring it.
   progress, and a restore that would offer the form again. Reordered so completion is
   recorded first and the save's failure is contained, with cancellation still rethrown.
   The regression test uses a store whose `save()` throws and fails on the old code.
+
+- **A search the field had already moved past could still replace its results.** The
+  rule "skip a term equal to the one on screen" returned early without cancelling
+  anything, so `bag` → `jacket` → `bag` inside the 300ms window left the `jacket` search
+  queued, and it fired and drew jacket results under a field reading `bag`. The early
+  return looked like an optimisation and hid a missing cancel. Caught in review, by reading the
+  ViewModel against its own debounce rules — no existing test exercised the sequence; the regression test
+  reproduces that exact sequence and fails on the old code with `[bag, jacket]` sent.

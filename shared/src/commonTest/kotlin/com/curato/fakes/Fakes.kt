@@ -107,6 +107,14 @@ class FakeCatalogueRepository : CatalogueRepository {
     /** Virtual milliseconds a search takes. See [searchProducts]. */
     var searchLatencyMillis: Long = 0
 
+    /**
+     * Answers per term, when set; [search] otherwise.
+     *
+     * The race tests need two searches to give **different** answers, or an obsolete
+     * result replacing the current one would be indistinguishable from the right one.
+     */
+    var searchResponder: ((String) -> ApiResult<SearchResults>)? = null
+
     /** Recorded so a test can prove the route's slug arrives unmangled. */
     var lastSlug: String? = null
     var lastProductId: Int? = null
@@ -149,7 +157,7 @@ class FakeCatalogueRepository : CatalogueRepository {
         // in flight: with an instant fake there is no moment at which `Loading` is the
         // state, and the one thing the loading branch exists for could not be asserted.
         if (searchLatencyMillis > 0) delay(searchLatencyMillis)
-        return search
+        return searchResponder?.invoke(query) ?: search
     }
 }
 

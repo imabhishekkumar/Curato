@@ -9,6 +9,7 @@ import com.curato.domain.usecase.MIN_QUERY_LENGTH
 import com.curato.domain.usecase.SearchProducts
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -76,7 +77,14 @@ class SearchViewModel(
         // "bag" → "bag " is the same search. The server trims, so re-firing would spend a
         // request redrawing an identical grid for a keystroke that changed nothing.
         val alreadyShowing = (_state.value as? SearchUiState.Results)?.results?.query
-        if (term == alreadyShowing) return
+        if (term == alreadyShowing) {
+            // Back to what is already on screen: "bag" → "jacket" → "bag" inside the
+            // debounce. Nothing new needs sending, but the "jacket" search queued on the
+            // way here does need abandoning — left alone, it fires and replaces the bag
+            // results under a field that says "bag".
+            searchJob?.cancel()
+            return
+        }
 
         search(term, debounced = true)
     }
@@ -109,7 +117,13 @@ class SearchViewModel(
             // field that now says something else is a screen telling a small lie.
             _state.value = SearchUiState.Loading
 
-            _state.value = when (val result = searchProducts(term)) {
+            val result = searchProducts(term)
+            // A superseded search must not draw. Cancellation normally surfaces as an
+            // exception out of the call above; this covers a repository that returns
+            // anyway, so an obsolete answer can never replace the current one.
+            ensureActive()
+
+            _state.value = when (result) {
                 is ApiResult.Ok -> SearchUiState.Results(result.value)
 
                 is ApiResult.Fail -> {

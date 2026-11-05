@@ -455,4 +455,66 @@ class SearchViewModelTest {
 
         assertEquals(listOf("jacket"), catalogue.searchQueries)
     }
+
+    // ---- returning to the term on screen ------------------------------------------
+
+    /**
+     * "bag" on screen, "jacket" typed, back to "bag" inside the debounce.
+     *
+     * The field ends where it started, so nothing new is needed — but the "jacket" search
+     * queued on the way has to be abandoned. Left alone it fired 300ms later and drew
+     * jacket results under a field reading "bag".
+     */
+    @Test
+    fun returning_to_the_displayed_term_cancels_the_search_queued_in_between() =
+        runTest(dispatcher) {
+            val catalogue = FakeCatalogueRepository().apply {
+                searchResponder = { term ->
+                    val id = if (term == "jacket") 99 else 1
+                    ApiResult.Ok(searchResults(query = term, products = listOf(summary(id))))
+                }
+            }
+            val vm = viewModel(catalogue = catalogue)
+
+            vm.onQueryChange("bag")
+            testScheduler.advanceUntilIdle()
+            assertEquals("bag", assertIs<SearchUiState.Results>(vm.state.value).results.query)
+
+            vm.onQueryChange("jacket")
+            testScheduler.advanceTimeBy(SearchDebounceMillis - 100)
+            vm.onQueryChange("bag")
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(listOf("bag"), catalogue.searchQueries)
+            val results = assertIs<SearchUiState.Results>(vm.state.value).results
+            assertEquals("bag", results.query)
+            assertEquals(listOf(1), results.products.map { it.id })
+        }
+
+    /** The same race once "jacket" is already in flight: its answer must never land. */
+    @Test
+    fun an_abandoned_search_in_flight_never_replaces_the_current_one() = runTest(dispatcher) {
+        val catalogue = FakeCatalogueRepository().apply {
+            searchLatencyMillis = 100
+            searchResponder = { term ->
+                val id = if (term == "jacket") 99 else 1
+                ApiResult.Ok(searchResults(query = term, products = listOf(summary(id))))
+            }
+        }
+        val vm = viewModel(catalogue = catalogue)
+
+        vm.onQueryChange("bag")
+        testScheduler.advanceUntilIdle()
+
+        vm.onQueryChange("jacket")
+        testScheduler.advanceTimeBy(SearchDebounceMillis + 1)
+        assertIs<SearchUiState.Loading>(vm.state.value)
+
+        vm.onQueryChange("bag")
+        testScheduler.advanceUntilIdle()
+
+        val results = assertIs<SearchUiState.Results>(vm.state.value).results
+        assertEquals("bag", results.query)
+        assertEquals(listOf(1), results.products.map { it.id })
+    }
 }
