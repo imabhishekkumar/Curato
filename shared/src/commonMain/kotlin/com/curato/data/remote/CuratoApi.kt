@@ -2,6 +2,7 @@ package com.curato.data.remote
 
 import com.curato.data.remote.dto.ApiErrorDto
 import com.curato.data.remote.dto.CategoriesDto
+import com.curato.data.remote.dto.CategoryProductsDto
 import com.curato.data.remote.dto.EnvelopeDto
 import com.curato.data.remote.dto.HomeDto
 import com.curato.domain.ApiResult
@@ -33,6 +34,18 @@ class CuratoApi(
 
     suspend fun getCategories(): ApiResult<CategoriesDto> =
         request { client.get(baseUrl) { url { appendPathSegments("categories") } } }
+
+    /**
+     * The slug goes in as its own path segment, so `appendPathSegments` encodes it.
+     *
+     * That matters more than it looks: slugs are backend-owned and today none of them
+     * needs escaping, but building this path by string concatenation would make a future
+     * slug containing a `/` or a space a silent routing bug rather than a request.
+     */
+    suspend fun getCategoryProducts(slug: String): ApiResult<CategoryProductsDto> =
+        request {
+            client.get(baseUrl) { url { appendPathSegments("categories", slug, "products") } }
+        }
 
     /**
      * Run a call and turn whatever happens into a result.

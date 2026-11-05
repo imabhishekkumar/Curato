@@ -3,6 +3,7 @@ package com.curato.fakes
 import com.curato.domain.ApiResult
 import com.curato.domain.DomainError
 import com.curato.domain.ErrorCode
+import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryRef
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
@@ -15,15 +16,30 @@ import com.curato.domain.repository.RecentlyViewedRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 
-fun summary(id: Int, rate: Double = 4.0, count: Int = 100) = ProductSummary(
+val Electronics = CategoryRef("electronics", "Electronics")
+val MensClothing = CategoryRef("mens-clothing", "Men's Clothing")
+
+fun summary(
+    id: Int,
+    rate: Double = 4.0,
+    count: Int = 100,
+    category: CategoryRef = Electronics,
+) = ProductSummary(
     id = id,
     title = "Product $id",
     price = 9.99,
     currency = "USD",
-    category = CategoryRef("electronics", "Electronics"),
+    category = category,
     imageUrl = "https://example.test/$id.png",
     rating = Rating(rate, count),
 )
+
+/** One category in full. `additional` empty is the ≤5 case the second section omits. */
+fun detail(
+    category: CategoryRef = Electronics,
+    topRated: List<ProductSummary> = listOf(summary(1, category = category)),
+    additional: List<ProductSummary> = emptyList(),
+) = CategoryDetail(category = category, topRated = topRated, additional = additional)
 
 fun recent(id: Int, viewedAt: Long = id.toLong()) = RecentProduct(
     id = id,
@@ -46,8 +62,14 @@ class FakeCatalogueRepository : CatalogueRepository {
     var categories: ApiResult<List<CategoryShelf>> =
         ApiResult.Ok(listOf(CategoryShelf(CategoryRef("electronics", "Electronics"), listOf(summary(1)))))
 
+    var categoryDetail: ApiResult<CategoryDetail> = ApiResult.Ok(detail())
+
     var featuredCalls = 0
     var categoryCalls = 0
+    var categoryDetailCalls = 0
+
+    /** Recorded so a test can prove the route's slug arrives unmangled. */
+    var lastSlug: String? = null
 
     override suspend fun getFeatured(): ApiResult<FeaturedShelf> {
         featuredCalls++
@@ -57,6 +79,12 @@ class FakeCatalogueRepository : CatalogueRepository {
     override suspend fun getCategoryShelves(): ApiResult<List<CategoryShelf>> {
         categoryCalls++
         return categories
+    }
+
+    override suspend fun getCategory(slug: String): ApiResult<CategoryDetail> {
+        categoryDetailCalls++
+        lastSlug = slug
+        return categoryDetail
     }
 }
 

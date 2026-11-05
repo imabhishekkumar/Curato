@@ -1,6 +1,7 @@
 package com.curato.data.mapper
 
 import com.curato.data.remote.dto.CategoriesDto
+import com.curato.data.remote.dto.CategoryProductsDto
 import com.curato.data.remote.dto.CategoryRefDto
 import com.curato.data.remote.dto.CategoryShelfDto
 import com.curato.data.remote.dto.FeaturedDto
@@ -8,6 +9,7 @@ import com.curato.data.remote.dto.HomeDto
 import com.curato.data.remote.dto.ProductDto
 import com.curato.data.remote.dto.ProductSummaryDto
 import com.curato.data.remote.dto.RatingDto
+import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryRef
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
@@ -66,3 +68,9 @@ fun CategoryShelfDto.toDomain() = CategoryShelf(
 )
 
 fun CategoriesDto.toDomain(): List<CategoryShelf> = categories.map { it.toDomain() }
+
+fun CategoryProductsDto.toDomain() = CategoryDetail(
+    category = category.toDomain(),
+    topRated = topRated.map { it.toDomain() },
+    additional = additional.map { it.toDomain() },
+)

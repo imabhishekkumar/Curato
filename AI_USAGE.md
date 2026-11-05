@@ -232,3 +232,30 @@ measuring it.
   concrete return on declaring the iOS target rather than merely intending to — the
   claim that the shared layer is portable gets checked instead of asserted.
 
+
+- **A grid measures its children differently from a list, and the layout said so.** The
+  Category screen's loading placeholder asked for a 140dp title bar and got a full-width
+  one. Nothing was wrong with the component: `LazyVerticalGrid` measures items at a
+  *fixed* width rather than a maximum, so `width(140.dp)` could not shrink below the
+  slot, and the placeholder read as a banner instead of a heading. Invisible to the
+  compiler and to every unit test — the only thing that catches it is looking at the
+  screen. Found by stalling a proxy in front of the backend so the loading state stayed
+  up long enough to photograph, which is the only way that state is ever observed on a
+  local machine where the API answers in nine milliseconds.
+
+- **Two components had quietly hard-coded Home's layout.** `ProductCard` set its own
+  156dp width and `SectionHeader` its own 16dp gutter, both correct for the only screen
+  that existed. Building the second screen made them wrong: a grid cell cannot override
+  a width the component applies to itself, and a heading that supplies its own gutter
+  inside a grid that already supplies one indents to 32dp while the cards beside it sit
+  at 16dp. Worth recording because the fix was not a new abstraction — it was deleting
+  two lines and letting the caller decide, which is what the design kit's own CSS had
+  been saying all along.
+
+- **Centring an error panel was a bug the first screen hid.** `StatePanel` spaced its
+  children but never aligned them vertically, so Home's full-screen failure state sat at
+  the top with a hand-tuned `padding(top = 48.dp)` compensating for it. On Category the
+  same panel looked plainly wrong. The real fix was one argument —
+  `Arrangement.spacedBy(space, Alignment.CenterVertically)` — and it let the compensating
+  padding come out of Home too. A magic number that exists to offset a missing rule is
+  usually pointing at the rule.

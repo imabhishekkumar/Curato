@@ -42,7 +42,10 @@ fun StatePanel(
     Column(
         modifier = modifier.fillMaxWidth().padding(Spacing.x6),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(Spacing.x2),
+        // Spaced *and* centred. Given a full-screen modifier the panel sits in the middle
+        // of the space it was handed, per the kit; given a wrapping one — a section-level
+        // error inside a list — the column wraps its content and the alignment is moot.
+        verticalArrangement = Arrangement.spacedBy(Spacing.x2, Alignment.CenterVertically),
     ) {
         if (glyph != null) {
             Text(

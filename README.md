@@ -2,12 +2,12 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: backend complete; client foundation and Home screen built and running.**
+> **Status: backend complete; client foundation, Home and Category built and running.**
 > Verified on a device: the backend suite passes on Node 22, the stack comes up under
-> docker compose, and the Android app renders Home against it on an emulator with its
-> own 35 shared tests green on two targets. **Not yet built:** the Category, Search,
-> Product and Enquiry screens — their routes exist and navigate, but each shows a
-> placeholder.
+> docker compose, and the Android app renders Home and Category against it on an
+> emulator with its own 50 shared tests green on two targets. **Not yet built:** the
+> Search, Product and Enquiry screens — their routes exist and navigate, but each shows
+> a placeholder.
 
 ## Stack, and why
 
@@ -268,7 +268,7 @@ colour, the Inter type scale with tabular figures, the 4dp spacing base, radii, 
 durations and the 48dp touch-target floor.
 
 **Built:** the design system, the network and envelope layer, DI, navigation, the
-device-local recently-viewed store, and Home. **Not built:** Category, Search, Product
+device-local recently-viewed store, Home and Category. **Not built:** Search, Product
 and Enquiry — their routes exist and carry the right primitives, but each renders a
 placeholder naming the parameter it resolved.
 
@@ -295,7 +295,7 @@ require reading the whole repo first.
 
 ```bash
 cd backend && nvm use && npm ci && npm run typecheck && npm test   # 216 tests
-./gradlew :shared:allTests                                          # 35, on two targets
+./gradlew :shared:allTests                                          # 50, on two targets
 ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64               # proves iOS compiles
 ```
 
@@ -321,11 +321,19 @@ and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
   a malformed body, an unknown route and a wrong verb.
 - **Client unit** — the envelope-to-result mapping including a code this build does not
   know; Home's two calls failing independently and a Retry re-running only the one that
-  failed; the shelf heading branching on `featured.source`; recently-viewed LRU, cap,
-  de-dupe and corrupt-payload handling; locale-independent price formatting. All in
+  failed; the shelf heading branching on `featured.source`; Category omitting its second
+  section when the remainder is empty, keeping the two sets disjoint when it is not, and
+  refusing a Retry on a slug that will never resolve; recently-viewed LRU, cap, de-dupe
+  and corrupt-payload handling; locale-independent price formatting. All in
   `commonMain`, so they run with no device — and they run on **both** the Android host
   and the iOS simulator, so a platform-specific regression fails the suite rather than
   a screen. Still to come with their screens: search and enquiry-draft coverage.
+- **One acceptance criterion is unit-only on purpose.** AC-6c's unknown slug cannot be
+  reached from the device: nothing in the UI links to a bad one, and the `curato://`
+  deeplink that would launch one is an explicit non-goal. It is pinned at both ends
+  instead — the backend contract test asserts `404 NOT_FOUND` for an unknown slug, and
+  the client tests assert that envelope becomes a non-retryable error with no Retry
+  button. What *was* checked on the device is the retryable path.
 - **Not covered: Compose UI instrumentation tests.** A deliberate cut — emulator-bound,
   slow, and the budget buys more confidence as unit coverage of the rules. Layout
   regressions are caught by eye, not CI.

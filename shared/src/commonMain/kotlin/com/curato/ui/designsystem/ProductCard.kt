@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
@@ -28,7 +27,11 @@ import coil3.compose.AsyncImagePainter
 import coil3.compose.SubcomposeAsyncImage
 import coil3.compose.SubcomposeAsyncImageContent
 
-/** The width of a card on a horizontally scrolling shelf. */
+/**
+ * The width of a card on a horizontally scrolling shelf.
+ *
+ * Applied by the shelf, not by the card — see the note on [ProductCard].
+ */
 val ShelfCardWidth: Dp = 156.dp
 
 /**
@@ -37,6 +40,11 @@ val ShelfCardWidth: Dp = 156.dp
  * `rating` is optional and that is load-bearing: the recently-viewed snapshot is stored
  * on the device and carries no rating, because storing one would put a value on the
  * device that nothing revalidates. The star line is omitted rather than faked.
+ *
+ * **The card does not set its own width.** A shelf pins it to [ShelfCardWidth]; a grid
+ * cell lets it fill the column. Forcing a width inside the component would make the grid
+ * impossible — the component's own modifier is applied last, so a `fillMaxWidth` from
+ * the caller would silently lose to it.
  */
 @Composable
 fun ProductCard(
@@ -51,7 +59,7 @@ fun ProductCard(
 ) {
     Card(
         onClick = onClick,
-        modifier = modifier.width(ShelfCardWidth),
+        modifier = modifier,
         shape = CuratoShapes.medium,
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainer,

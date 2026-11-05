@@ -13,6 +13,7 @@ import com.curato.data.remote.createHttpClient
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
@@ -42,6 +43,50 @@ class EnvelopeMappingTest {
         val result = api.getHome()
         assertTrue(result is ApiResult.Ok)
         assertEquals("computed", result.value.featured.source)
+    }
+
+    /**
+     * §4.3's payload, including an `additional` that came back empty.
+     *
+     * Empty and absent are both legitimate here, and both have to arrive as an empty
+     * list rather than as null — the screen branches on `isNotEmpty()` to decide whether
+     * the second section exists at all, so a null would be a crash on the ≤5 case, which
+     * is three of the four real categories.
+     */
+    @Test
+    fun a_category_payload_decodes_with_an_empty_additional() = runTest {
+        val api = apiReturning(
+            """{"success":true,"error":null,"data":{"category":{"slug":"jewelery","name":"Jewelery"},"topRated":[{"id":5,"title":"Naga Bracelet","price":695.0,"currency":"USD","category":{"slug":"jewelery","name":"Jewelery"},"imageUrl":"https://example.test/5.png","rating":{"rate":4.6,"count":400}}],"additional":[]}}""",
+        )
+        val result = api.getCategoryProducts("jewelery")
+        assertTrue(result is ApiResult.Ok)
+        assertEquals("Jewelery", result.value.category.name)
+        assertEquals(listOf(5), result.value.topRated.map { it.id })
+        assertTrue(result.value.additional.isEmpty())
+    }
+
+    /** The key missing entirely behaves the same way, rather than failing the parse. */
+    @Test
+    fun a_category_payload_tolerates_additional_being_absent() = runTest {
+        val api = apiReturning(
+            """{"success":true,"error":null,"data":{"category":{"slug":"jewelery","name":"Jewelery"},"topRated":[]}}""",
+        )
+        val result = api.getCategoryProducts("jewelery")
+        assertTrue(result is ApiResult.Ok)
+        assertTrue(result.value.additional.isEmpty())
+    }
+
+    /** AC-6c: an unknown slug is an error envelope, and a non-retryable one. */
+    @Test
+    fun an_unknown_slug_maps_to_a_terminal_not_found() = runTest {
+        val api = apiReturning(
+            """{"success":false,"data":null,"error":{"code":"NOT_FOUND","userMessage":"We could not find what you were looking for.","developerMessage":"unknown category slug"}}""",
+            HttpStatusCode.NotFound,
+        )
+        val result = api.getCategoryProducts("groceries")
+        assertTrue(result is ApiResult.Fail)
+        assertEquals(ErrorCode.NOT_FOUND, result.error.code)
+        assertFalse(result.error.isRetryable)
     }
 
     @Test

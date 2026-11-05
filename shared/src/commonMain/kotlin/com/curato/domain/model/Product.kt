@@ -60,3 +60,17 @@ data class CategoryShelf(
     val category: CategoryRef,
     val topRated: List<ProductSummary>,
 )
+
+/**
+ * One category's complete contents (SPEC.md §4.3) — the Category screen's payload.
+ *
+ * Deliberately not [CategoryShelf]. A shelf is Home's shape: a category and the head of
+ * its ranking, with the remainder left unfetched. This is the whole category split in
+ * two, and [additional] being empty is the signal that the second section is omitted
+ * rather than rendered bare.
+ */
+data class CategoryDetail(
+    val category: CategoryRef,
+    val topRated: List<ProductSummary>,
+    val additional: List<ProductSummary>,
+)

@@ -82,8 +82,7 @@ fun HomeScreen(
                 actions = listOf(PanelAction("Retry", onRetryAll)),
                 modifier = Modifier
                     .fillMaxSize()
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical))
-                    .padding(top = Spacing.x12),
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical)),
             )
             return@Surface
         }
@@ -132,7 +131,10 @@ fun HomeScreen(
 @Composable
 private fun RecentlyViewedShelf(items: List<RecentProduct>, onProductClick: (Int) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.x3)) {
-        SectionHeader(title = "Recently viewed")
+        SectionHeader(
+            title = "Recently viewed",
+            modifier = Modifier.padding(horizontal = Spacing.gutter),
+        )
         LazyRow(
             contentPadding = PaddingValues(horizontal = Spacing.gutter),
             horizontalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
@@ -146,6 +148,7 @@ private fun RecentlyViewedShelf(items: List<RecentProduct>, onProductClick: (Int
                     currency = product.currency,
                     imageUrl = product.imageUrl,
                     onClick = { onProductClick(product.id) },
+                    modifier = Modifier.width(ShelfCardWidth),
                 )
             }
         }
@@ -227,7 +230,12 @@ private fun ProductShelf(
     onActionClick: (() -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(Spacing.x3)) {
-        SectionHeader(title = title, actionLabel = actionLabel, onActionClick = onActionClick)
+        SectionHeader(
+            title = title,
+            actionLabel = actionLabel,
+            onActionClick = onActionClick,
+            modifier = Modifier.padding(horizontal = Spacing.gutter),
+        )
         LazyRow(
             contentPadding = PaddingValues(horizontal = Spacing.gutter),
             horizontalArrangement = Arrangement.spacedBy(Spacing.betweenCards),
@@ -241,6 +249,7 @@ private fun ProductShelf(
                     rating = product.rating.rate,
                     ratingCount = product.rating.count,
                     onClick = { onProductClick(product.id) },
+                    modifier = Modifier.width(ShelfCardWidth),
                 )
             }
         }

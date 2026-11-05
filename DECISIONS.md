@@ -171,6 +171,49 @@ The base URL is a Gradle property feeding a build-config field, so neither path 
 code edit. Named here because a reviewer hitting the NAT problem would otherwise have no
 reason to suspect their emulator rather than the app.
 
+## Who owns a component's placement
+
+Two design-system components were changed while building Category, both the same way and
+for the same reason: **`ProductCard` no longer sets its own width, and `SectionHeader` no
+longer sets its own gutter.** Their callers do.
+
+Both had hard-coded the value that was right for Home. `ProductCard` applied
+`width(156.dp)` internally, which a grid cell cannot override — a component's own
+modifier is applied last, so a `fillMaxWidth` from the caller silently loses to it, and a
+two-column grid of 156dp cards is not a grid. `SectionHeader` applied a 16dp horizontal
+gutter, which in a grid whose `contentPadding` already supplies one indents the heading
+to 32dp while the cards beside it sit at 16dp.
+
+The screen kit draws the same distinction in its own CSS: `.a-card` has a fixed width on
+a shelf and `.a-grid .a-card { width: auto }` in a grid, and `.a-sh` and `.a-grid` are
+siblings that each carry their own padding rather than nesting. A component decides how
+it looks; its container decides where it sits and how big it is.
+
+## Passing a route argument to a ViewModel
+
+`CategoryViewModel` takes its slug as a plain constructor `String`, supplied through
+Koin's `parametersOf`. Not a `SavedStateHandle`.
+
+The slug is already part of the route, so it lives in the back-stack entry and Navigation
+restores it across process death on its own — a handle would store a second copy of
+something that is already durable. Keeping the constructor a `String` is also what lets
+the ViewModel tests build one with no Koin, no Android and no navigation library in
+sight. `SavedStateHandle` earns its place where a screen holds state the route does not
+carry, which is the Search screen's query (SPEC §7.4) rather than this.
+
+## Category's state is not Home's
+
+Home holds a `SectionState` per section because it fires two independent calls and either
+can fail alone. Category fires one, and both its sections come out of that single
+response — there is no state in which "Top rated" loaded while "More in" failed.
+
+So Category has its own three-state type rather than reusing Home's. Sharing it would
+have meant importing a shape from `presentation.home` in order to model a situation that
+cannot arise, and the saving would have been about fifteen lines. The screen's one real
+rule — that an empty `additional` omits the second section entirely — is a named property
+on the content state, so it is a thing a test asserts rather than a condition buried in a
+composable.
+
 ## Design system
 
 Planned: a lightweight design system using Compose Material 3, with centralized theme

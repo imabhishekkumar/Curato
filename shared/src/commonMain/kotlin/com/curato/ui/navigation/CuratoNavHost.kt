@@ -13,10 +13,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.savedstate.read
+import com.curato.presentation.category.CategoryViewModel
 import com.curato.presentation.home.HomeViewModel
+import com.curato.ui.category.CategoryScreen
 import com.curato.ui.designsystem.StatePanel
 import com.curato.ui.home.HomeScreen
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 /**
  * Routes (SPEC.md §8).
@@ -61,16 +64,26 @@ fun CuratoNavHost(
             )
         }
 
-        // The remaining four routes are declared now, with their parameter types, so
-        // Home's View all and card taps navigate for real rather than into nothing.
-        // Each is replaced by its screen in the next pass.
         composable(
             route = Routes.CATEGORY,
             arguments = listOf(navArgument("slug") { type = NavType.StringType }),
         ) { entry ->
-            NotBuiltYet("Category", entry.arguments?.read { getStringOrNull("slug") })
+            // The route's primitive, read once and handed to the ViewModel as a plain
+            // String. Nothing below this line knows a navigation library exists.
+            val slug = entry.arguments?.read { getStringOrNull("slug") }.orEmpty()
+            val viewModel: CategoryViewModel = koinViewModel { parametersOf(slug) }
+            val state by viewModel.state.collectAsStateWithLifecycle()
+            CategoryScreen(
+                state = state,
+                onProductClick = { id -> navController.navigate(Routes.product(id)) },
+                onRetry = viewModel::load,
+                onBack = { navController.popBackStack() },
+            )
         }
 
+        // The remaining three routes are declared with their parameter types so Home's
+        // taps navigate for real rather than into nothing. Each is replaced by its
+        // screen in a later pass.
         composable(
             route = Routes.SEARCH,
             arguments = listOf(

@@ -79,3 +79,19 @@ data class CategoryShelfDto(
     val category: CategoryRefDto,
     @SerialName("topRated") val topRated: List<ProductSummaryDto>,
 )
+
+/**
+ * `GET /categories/{slug}/products` (SPEC.md §4.3) — one category's complete contents.
+ *
+ * `additional` defaults to empty because empty is a real, expected answer: a category of
+ * five or fewer products has no remainder, and SPEC §7.3 omits the second section
+ * entirely when that happens. `topRated` carries no default on purpose — a response
+ * missing it is malformed rather than empty, and should fail the parse and surface as
+ * `UNEXPECTED_RESPONSE` instead of rendering a category that looks legitimately bare.
+ */
+@Serializable
+data class CategoryProductsDto(
+    val category: CategoryRefDto,
+    val topRated: List<ProductSummaryDto>,
+    val additional: List<ProductSummaryDto> = emptyList(),
+)

@@ -1,6 +1,7 @@
 package com.curato.domain.usecase
 
 import com.curato.domain.ApiResult
+import com.curato.domain.model.CategoryDetail
 import com.curato.domain.model.CategoryShelf
 import com.curato.domain.model.FeaturedShelf
 import com.curato.domain.model.RecentProduct
@@ -23,6 +24,11 @@ class GetFeaturedShelf(private val repository: CatalogueRepository) {
 class GetCategoryShelves(private val repository: CatalogueRepository) {
     suspend operator fun invoke(): ApiResult<List<CategoryShelf>> =
         repository.getCategoryShelves()
+}
+
+class GetCategory(private val repository: CatalogueRepository) {
+    suspend operator fun invoke(slug: String): ApiResult<CategoryDetail> =
+        repository.getCategory(slug)
 }
 
 class ObserveRecentlyViewed(private val repository: RecentlyViewedRepository) {
