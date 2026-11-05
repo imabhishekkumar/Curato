@@ -116,8 +116,16 @@ about how to honour it that the spec deliberately left open.
 
 Resolved against a real build rather than a compatibility table, because the current
 matrix is recent enough that guessing wastes more time than probing: **Gradle 9.8.2, AGP
-9.5.0, Kotlin 2.4.21, Compose Multiplatform 1.12.2, compileSdk 37, minSdk 26, JDK 21.**
+9.3.0, Kotlin 2.4.21, Compose Multiplatform 1.12.2, compileSdk 37, minSdk 26, JDK 21.**
 
+- **AGP is held one minor behind its own latest on purpose.** 9.5.0 is the current stable
+  and the build is green on it; Android Studio 2026.1 refuses to sync it, because its
+  bundled AGP is a `9.4.0-dev` build and its stable ceiling is 9.3.0. The command line
+  does not care — `assembleDebug` and the full test suite pass identically on 9.3.0,
+  9.3.3 and 9.5.0 — so the only thing the newer version buys is a version number, and the
+  only thing it costs is that the project cannot be opened in a released IDE. For a
+  project whose point is to be read by someone else, that trade is the wrong way round.
+  Revisit when a Studio that supports 9.5.0 ships.
 - **JDK 21 is pinned, not inherited.** This machine defaults to JDK 26, which AGP does
   not support. `gradle/gradle-daemon-jvm.properties` states a version criterion rather
   than a path, so the build does not depend on whoever set `JAVA_HOME` last and still

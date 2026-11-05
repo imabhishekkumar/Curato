@@ -373,3 +373,13 @@ measuring it.
   `ClipEntry`. The iOS half was written against a symbol found by reading the klib rather
   than from memory, and confirmed by linking the framework. The Android half was confirmed
   by tapping Copy and pasting into the message field: `01JBQ7F3K2`, the bare id.
+
+- **"Latest" and "usable" are different properties, and the build system only checks one.**
+  Android Studio refused to sync the project while every command-line gate stayed green,
+  because AGP 9.5.0 is newer than any released IDE supports. The tempting read is that the
+  IDE is wrong and the build is right. But the build only proves the code compiles; it
+  says nothing about whether a reviewer can open the project, which for this repo is most
+  of the point. Checking the IDE's own bundled version rather than guessing at the
+  ceiling — `libagp-version.jar` reports `9.4.0-dev` — turned "try a lower number" into a
+  decision with a reason attached, and the two candidate versions were each run through
+  the full suite before one was chosen.

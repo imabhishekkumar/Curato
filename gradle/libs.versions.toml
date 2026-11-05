@@ -5,7 +5,9 @@
 
 [versions]
 kotlin = "2.4.21"
-agp = "9.5.0"
+# Deliberately one minor behind the current stable 9.5.0, which builds fine but which no
+# released Android Studio can sync yet. See "Client toolchain" in DECISIONS.md.
+agp = "9.3.0"
 compose-multiplatform = "1.12.2"
 
 androidx-activity-compose = "1.13.0"
