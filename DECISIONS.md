@@ -264,14 +264,20 @@ timing out of the tests. It was rejected because a 20-product catalogue answers 
 milliseconds, and making someone press a key to see that is friction with nothing behind
 it.
 
-## A `SavedStateHandle`, for the one screen that needs one
+## A `SavedStateHandle`, for the two screens that need one
 
 `CategoryViewModel` and `ProductViewModel` both take their route parameter as a plain
 constructor argument, and both carry a comment saying a `SavedStateHandle` would buy
 nothing — the slug and the id already live in the back-stack entry, and Navigation
-restores them. `SearchViewModel` takes one. Those positions do not conflict: a slug and
-an id cannot change while the screen is open, and a search term changes with every
-keystroke, so the route it arrived on stops describing it immediately.
+restores them. `SearchViewModel` and `EnquiryViewModel` take one. Those positions do not
+conflict: a slug and an id cannot change while the screen is open, whereas a search term
+changes with every keystroke and an enquiry form is being typed into — in both cases the
+route stops describing the screen's contents the moment the customer touches it.
+
+Enquiry is the interesting one, because it needs *both*: the product id is a route
+parameter that cannot change, so it stays a plain constructor argument, and the form
+draft goes in the handle. Splitting them that way keeps each mechanism doing the thing it
+is good at rather than forcing one to cover both.
 
 This is what §7.4 asks for and what the table in *State persistence* above already
 anticipated. It arrives through the existing `parametersOf(...)` path as
@@ -284,16 +290,110 @@ separate seed parameter that could disagree with it.
 Verified the only way it can be: killing the process with the task backgrounded and
 resuming it. A new pid comes up with the term still in the field and the search re-run.
 
+## The enquiry's two stores, and why they are kept apart
+
+[SPEC.md](SPEC.md) §7.6 says conflating the reusable contact store with the ephemeral
+form draft "is the easiest way to implement this screen wrongly", so they are not merely
+documented apart, they are built apart: a DataStore record keyed `saved_contact`, and one
+serialized value in the route entry's `SavedStateHandle`. They have opposite lifetimes —
+one survives app restarts indefinitely and is cleared the instant consent is withdrawn;
+the other survives process death only and dies with the route.
+
+The subtler half is **inside** the draft. Its two parts are cleared at different moments:
+field values go on a successful submission, and the completion state (`submitted`,
+`acceptedAt`) stays until the route itself leaves the back stack. Clearing the draft
+wholesale on success would destroy `submitted` at the exact moment it starts mattering,
+and a screen restored after process death would present a filled form with a live Submit
+for an enquiry that had already been sent.
+
+**The completion state carries two fields beyond the spec's table** — the email the
+confirmation was addressed to, and the product title it named. Both are form values,
+which §7.6 clears on success, yet the thank-you's copy reads them. Holding copies here is
+what lets a restored thank-you render *with no network call at all*. That is not an
+optimisation: with a fetch, an unreachable catalogue or a product removed in the meantime
+could replace a send the backend had already confirmed with an error panel. Verified by
+stopping the backend entirely, killing the process, and relaunching — the thank-you comes
+back whole. Neither field makes anything submittable, which is the rule §7.6 is actually
+protecting.
+
+## The client's validation mirror is deliberately looser than the server's
+
+§6 calls client-side validation "mirrored for immediate feedback" and makes the server
+authoritative. That asymmetry decides what to do where the two cannot be made identical.
+
+Of the two ways to disagree with the backend, only one is harmful. A client rule
+*stricter* than the server's refuses to send something the backend would have accepted,
+and the customer has no way to argue with it. A client rule *looser* costs one round trip
+and comes back as a 422 the screen already renders against the same inputs. So the email
+check is intentionally permissive — one `@`, a dotted domain, no whitespace, a length cap
+— and leaves the judgement calls to Zod. Name, phone and message mirror §6 exactly,
+because those rules are mechanical and cannot drift.
+
+Every message is a constant holding the backend's exact string, and the envelope tests
+assert them against a real 422 payload. The banner copy is the same: `VALIDATION_FAILED`'s
+`userMessage` is needed as a constant precisely because the client half can fail *without
+a round trip*, so there is no envelope to read it from.
+
+## One dependency added for one date
+
+`kotlinx-datetime`, for a single line: the thank-you's `Accepted 5 Nov 2026, 11:53`.
+
+The backend sends `acceptedAt` as a UTC instant. The Kotlin standard library will parse
+it — `kotlin.time.Instant` does that much — but carries no time zone database, so there
+is no way to render it on the customer's own clock without a library. The alternatives
+were a stamp labelled UTC, which is correct and useless to someone in IST reading a time
+five and a half hours off their own, or dropping the stamp, which loses the one part of
+the thank-you that evidences the backend actually confirmed.
+
+On Android it resolves the `jvm` variant and reads `java.time`, available natively from
+API 26 — exactly this project's `minSdk`, so no core-library desugaring is required.
+
+An unparseable timestamp yields **no stamp**, never an error and never a placeholder: the
+enquiry has already been accepted by then, and a cosmetic problem must not be allowed to
+make a confirmed send look conditional.
+
+## Two things the device found that the tests could not
+
+Both were caught by looking at screenshots, and both had passed a green suite.
+
+**A banner nobody could see.** Submit lives in the sticky bar at the bottom, so a
+validation failure almost always arrives with the form scrolled to its end — and the
+banner is composed at the top. The field outlines turned red and the sentence explaining
+why sat off-screen above. The form now scrolls itself to the banner when one appears. A
+unit test asserting `banner != null` passes either way; this is only visible on a screen.
+
+**A button that named an attempt that never happened.** The label keyed off "is a banner
+showing" rather than "did a request fail", so the client's own validation rejecting a
+form relabelled Submit to *Retry*. The kit draws all three frames and they disagree on
+this — *Send enquiry* on the validation frame, *Retry* on the send-failure one, *Try
+again* on the rate-limited one — which makes it a rule rather than a preference. The
+banner now carries which frame it is, and the label is read off that.
+
+A third, smaller one came from the same pass: arriving at the enquiry screen for a
+product that no longer resolves used to say "Your enquiry was not sent", which describes
+an attempt the customer had not made. That copy is right after a submission and wrong
+before one, so the state carries which path produced it.
+
 ## Where the Screen Kit contradicts itself
 
-Two places, both resolved toward the drawn artifact over the written table.
+Three places, each resolved toward the drawn artifact over the written table.
 
 **The search field.** The kit's component inventory lists `AppTextField` — "label always
 rendered", 10dp radius — against Search. The three Search frames it actually draws are a
 label-less 999px pill in the app bar, with a leading magnifier and no clear control. The
 mockup is the more specific of the two, so Search gets its own `SearchField`, and the
-labelled variant waits for Enquiry, where it is the thing the kit draws. There is also no
-clear affordance and no glyph for one anywhere in the kit's sprite, so none was invented.
+labelled variant went to Enquiry, where it is the thing the kit actually draws — both now
+exist, each matching the frames it appears in. There is also no clear affordance and no
+glyph for one anywhere in the kit's sprite, so none was invented.
+
+**The enquiry's error copy.** The kit draws warmer strings than the backend's registry —
+"We could not send your enquiry. Your details are saved — try again." against the
+registry's "We could not send your enquiry. Please try again." The server's wins, for two
+reasons. §5 makes `userMessage` "the only *general* error string displayed", so client-side
+substitution would duplicate copy that is meant to change without a client release. And
+in this specific case the kit's wording asserts something that is false exactly when
+consent is unchecked: the details are not saved. The kit's glyph distinction is kept,
+because that is about which *kind* of failure this is rather than about wording.
 
 **The below-minimum copy.** The kit says this panel uses "the same copy as the server's
 `fieldErrors.q`", then draws *"Enter at least 2 characters to search."* where the server

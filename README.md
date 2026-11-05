@@ -2,13 +2,11 @@
 
 A small product catalogue: browse, search, and submit an enquiry on a product.
 
-> **Status: backend complete; client foundation, Home, Category, Product and Search
-> built and running.** Verified on a device: the backend suite passes on Node 22, the
-> stack comes up under docker compose, and the Android app browses from Home through a
-> category to a product — and searches the catalogue — against it on an emulator, with
-> its own 98 shared tests green on two targets. **Not yet built:** the Enquiry screen —
-> its route exists and carries both the product id and the price that was on screen, but
-> it shows a placeholder.
+> **Status: complete — backend and client, every screen built and running.** Verified on
+> a device: the backend suite passes on Node 22, the stack comes up under docker compose,
+> and the Android app browses from Home through a category to a product, searches the
+> catalogue, and sends a real enquiry that lands in the Mailhog inbox — with 182 shared
+> client tests green on two targets. No route renders a placeholder.
 
 ## Stack, and why
 
@@ -270,12 +268,14 @@ Every visual token and all nine components come from the
 colour, the Inter type scale with tabular figures, the 4dp spacing base, radii, motion
 durations and the 48dp touch-target floor.
 
-**Built:** the design system, the network and envelope layer, DI, navigation, the
-device-local recently-viewed store, Home, Category, Product and Search. **Not built:**
-Enquiry — its route exists and carries the right primitives, but it renders a placeholder
-naming the parameters it resolved. Tapping **Enquire** on a product already navigates with
-both the id and the price that was on screen, so the `seenPrice` diagnostic is live before
-the screen that sends it exists.
+**All six screens are built**, along with the design system, the network and envelope
+layer, DI, navigation, and both device-local stores. Nothing renders a placeholder.
+
+Enquiry is the largest of them and the only write path in the app: it resolves its own
+product from the route's id, mirrors the §6 validation rules for immediate feedback while
+leaving the server authoritative, keeps the reusable contact store and the ephemeral form
+draft physically apart, and restores a confirmed "Thank you" after process death without
+making a single network call.
 
 ## Where to change things
 
@@ -300,7 +300,7 @@ require reading the whole repo first.
 
 ```bash
 cd backend && nvm use && npm ci && npm run typecheck && npm test   # 216 tests
-./gradlew :shared:allTests                                          # 98, on two targets
+./gradlew :shared:allTests                                          # 182, on two targets
 ./gradlew :shared:linkDebugFrameworkIosSimulatorArm64               # proves iOS compiles
 ```
 
@@ -330,11 +330,21 @@ and what is deliberately **not** tested, is in [SPEC.md](SPEC.md) §11.
   section when the remainder is empty, keeping the two sets disjoint when it is not, and
   refusing a Retry on a slug that will never resolve; Product recording a view only on a
   successful load and never on a failed one, and de-duplicating a re-view to the front;
-  the Enquire route carrying — and correctly omitting — the captured price;
+  the Enquire route carrying — and correctly omitting — the captured price; Search
+  firing exactly one request for a typed word and quoting the term the *server* matched;
   recently-viewed LRU, cap, de-dupe and corrupt-payload handling; locale-independent
   price formatting. All in `commonMain`, so they run with no device — and they run on **both** the Android host
   and the iOS simulator, so a platform-specific regression fails the suite rather than
-  a screen. Still to come with their screens: search and enquiry-draft coverage.
+  a screen.
+- **Client enquiry** — the densest group, because this is the only write and most of its
+  rules are invisible on screen when broken: three rapid taps producing one submission;
+  nothing stored when consent is unchecked and the store cleared the instant it is;
+  a restored `submitted` draft rendering the thank-you and firing **zero** calls; the
+  message surviving process death in the draft while never entering the contact store;
+  `seenPrice` reaching the request exactly as the route carried it, and absent optionals
+  omitted from the body rather than sent as `null`. Plus the §6 mirror boundary by
+  boundary, including the addresses it must **not** reject — a client stricter than the
+  server refuses submissions the backend would have accepted.
 - **One acceptance criterion is unit-only on purpose.** AC-6c's unknown slug cannot be
   reached from the device: nothing in the UI links to a bad one, and the `curato://`
   deeplink that would launch one is an explicit non-goal. It is pinned at both ends

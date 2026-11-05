@@ -323,3 +323,53 @@ measuring it.
   request" is only evidence if more than one request is possible, so the device check also
   types `cot`, pauses, then `ton` and requires exactly two. Without the second half, a
   screen that had silently stopped searching altogether would have passed the first.
+
+- **The model wrote a correct screen and two wrong sentences, and only a screenshot told
+  them apart.** The enquiry form's validation banner is composed at the top of a scrolling
+  column; Submit is in a sticky bar at the bottom. So a validation failure arrives with
+  the form scrolled to its end, and the explanation lands off-screen above — field
+  outlines turn red and nothing says why. The unit tests assert `banner != null` and pass
+  in both worlds. The second was the button: its label keyed off "is a banner showing"
+  rather than "did a request fail", so the client's own validation rejecting a form
+  relabelled *Send enquiry* to *Retry* — naming an attempt that had never happened. The
+  kit draws three frames with three different labels, which is what settled it. Both are
+  now pinned by tests, but neither test would have been written without looking.
+
+- **A third copy bug of the same shape, found by reading rather than running.** The
+  "no longer available" state is reached from two directions — the product failing to
+  resolve on arrival, and the backend rejecting the submission — and it said "Your
+  enquiry was not sent" in both. True after a submission; before one it describes an
+  event the customer has not caused. The state now carries which path produced it.
+  Recording this because all three errors share a root: a single rendering reused across
+  two situations that are only *nearly* the same.
+
+- **Where the kit was followed, and the one place it was overruled.** Its enquiry frames
+  draw warmer error copy than the backend's registry — "Your details are saved — try
+  again". That sentence is false exactly when consent is unchecked, and §5 makes the
+  server's `userMessage` the only general error string shown. The glyph distinction the
+  kit draws (a clock for rate limiting, a warning triangle otherwise) was kept, because
+  that encodes *which kind* of failure rather than wording.
+
+- **The upstream disappeared mid-verification, and the fixture in the repo saved it.**
+  Fake Store put a Cloudflare bot challenge in front of the API, so no server-side fetch
+  could reach it and the whole device pass was blocked on a dependency outside the
+  project. The backend already took `UPSTREAM_BASE_URL` from config and the repo already
+  shipped a recorded 20-product upstream fixture for its own tests, so a thirty-line
+  static server stood in for Fake Store and everything ran end to end with no internet.
+  Two decisions made months of "later" cheap: configuring the upstream rather than
+  hardcoding it, and recording a real fixture rather than hand-writing one.
+
+- **"It restores without a network call" is only believable if the network is gone.**
+  AC-20 asks that process death on the thank-you restores the thank-you. Counting requests
+  would have shown zero, but counting proves absence of evidence rather than the property.
+  Stopping the backend entirely, killing the app, and relaunching does prove it — the
+  confirmation comes back whole against a dead server. That check is also what justifies
+  the design decision it tests: the completion state carries its own copy of the email and
+  the product title precisely so that no fetch can fail underneath a confirmed send.
+
+- **Verified the clipboard by pasting, not by trusting the label.** `TraceIdRow` needed
+  the one `expect`/`actual` in the UI layer, because Compose Multiplatform 1.12.2 exposes
+  the `Clipboard` interface in `commonMain` but no common way to build a plain-text
+  `ClipEntry`. The iOS half was written against a symbol found by reading the klib rather
+  than from memory, and confirmed by linking the framework. The Android half was confirmed
+  by tapping Copy and pasting into the message field: `01JBQ7F3K2`, the bare id.
