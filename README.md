@@ -148,33 +148,35 @@ remains the path a reviewer should use.
 
 ### 2. Android client (~5 minutes)
 
-Open the project in Android Studio, let Gradle sync, and run the `androidApp`
-configuration on an emulator. Or from the command line:
+The debug build talks to `http://localhost:8080` over an adb port forward, so set that up
+first — once per device, and `./scripts/dev.sh` does it for every attached device:
+
+```bash
+adb reverse tcp:8080 tcp:8080
+```
+
+Then open the project in Android Studio, let Gradle sync, and run the `androidApp`
+configuration. Or from the command line:
 
 ```bash
 ./gradlew :androidApp:installDebug
 ```
 
-**If Home shows "No connection" while the backend is plainly running**, the emulator's
-NAT is not completing TCP to the host — which happened on the machine this was built
-on. Tunnel over adb instead; this is also the route that works for a physical device:
+Both produce the same build: the base URL comes from `curato.apiBaseUrl` in
+`gradle.properties`, so Android Studio's Run button needs no extra arguments. Override it
+for a deployed backend with `-Pcurato.apiBaseUrl=…`.
 
-```bash
-adb reverse tcp:8080 tcp:8080
-./gradlew :androidApp:installDebug -Pcurato.apiBaseUrl=http://localhost:8080
-```
-
-> **Two things that will otherwise fail silently**, both to be configured in the debug
-> build — listed because they are the usual reason a local run "just doesn't work":
+> **Two things that otherwise fail silently**, listed because they are the usual reason a
+> local run "just doesn't work":
 >
-> 1. **The emulator cannot reach your machine at `localhost`.** Inside the emulator,
->    `localhost` is the emulator. The host is **`10.0.2.2`**, so the debug base URL is
->    `http://10.0.2.2:8080`.
+> 1. **`localhost` inside the emulator is the emulator**, so it reaches your machine only
+>    through the `adb reverse` above. The emulator's `10.0.2.2` host alias avoids the
+>    forward but is emulator-only, and on some images — the Pixel 10 API 37 one here —
+>    an app's socket to it times out after 10s while the system browser still reaches it.
+>    That reads as "the backend is down" when it is plainly running, so the forward is the
+>    default: it behaves the same on an emulator and on a physical device.
 > 2. **Android 9+ blocks cleartext HTTP.** A debug-only network-security configuration
->    will permit `10.0.2.2`; release builds keep cleartext blocked.
->
-> To point the app at a different backend, change the base URL build-config field — no
-> code edit needed.
+>    permits `localhost` and `10.0.2.2`; release builds keep cleartext blocked.
 
 ### Configuration
 

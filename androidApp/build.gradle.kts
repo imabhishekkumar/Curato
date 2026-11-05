@@ -28,17 +28,15 @@ android {
 
     buildTypes {
         debug {
-            // Inside the emulator, `localhost` is the emulator; 10.0.2.2 is the host.
-            // That is the documented default and works on a standard setup.
+            // The effective value comes from `curato.apiBaseUrl` in gradle.properties,
+            // which sets `http://localhost:8080` and explains why. The literal below is
+            // only the fallback if that line is removed.
             //
-            // It does not work everywhere. On at least one machine here the emulator's
-            // NAT answers ICMP but never completes a TCP connection to the host, so the
-            // app times out with the backend plainly running. `adb reverse` tunnels over
-            // the adb connection instead and sidesteps the NAT entirely — which also
-            // makes it the route that works for a physical device:
-            //
-            //   adb reverse tcp:8080 tcp:8080
-            //   ./gradlew :androidApp:installDebug -Pcurato.apiBaseUrl=http://localhost:8080
+            // `localhost` needs `adb reverse tcp:8080 tcp:8080` — which is the point:
+            // it is the one route that works on an emulator and on a physical device
+            // alike. The 10.0.2.2 host alias is emulator-only, and on some images it is
+            // silently unreachable from an app while the system browser still reaches it,
+            // so the app times out with the backend plainly running.
             //
             // A property rather than an edit, so neither path needs a code change.
             buildConfigField("String", "API_BASE_URL", "\"$debugApiBaseUrl\"")
